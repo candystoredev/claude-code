@@ -4,7 +4,7 @@ import json
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 from openpyxl import load_workbook, Workbook
-from anthropic import Anthropic
+from anthropic import Anthropic, AuthenticationError, APIError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +12,8 @@ load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB limit
 
-client = Anthropic()
+api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+client = Anthropic(api_key=api_key) if api_key else None
 
 HANDLE_RULES_PROMPT = """You are a Shopify handle generator. Given product names, generate URL-friendly handles following these rules EXACTLY:
 
@@ -39,54 +40,64 @@ def index():
 
 @app.route("/generate", methods=["POST"])
 def generate_handles():
+    if not client:
+        return jsonify({"error": "ANTHROPIC_API_KEY is not set. Add it to your .env file and restart the server."}), 500
+
     data = request.get_json()
     product_names = data.get("product_names", [])
 
     if not product_names:
         return jsonify({"error": "No product names provided"}), 400
 
-    # Process in batches of 50 to avoid token limits
-    batch_size = 50
-    all_results = []
-    all_handles_so_far = []
+    try:
+        # Process in batches of 50 to avoid token limits
+        batch_size = 50
+        all_results = []
+        all_handles_so_far = []
 
-    for i in range(0, len(product_names), batch_size):
-        batch = product_names[i : i + batch_size]
+        for i in range(0, len(product_names), batch_size):
+            batch = product_names[i : i + batch_size]
 
-        user_message = "Generate Shopify handles for these products:\n\n"
-        for j, name in enumerate(batch, 1):
-            user_message += f"{j}. {name}\n"
+            user_message = "Generate Shopify handles for these products:\n\n"
+            for j, name in enumerate(batch, 1):
+                user_message += f"{j}. {name}\n"
 
-        if all_handles_so_far:
-            user_message += (
-                "\n\nAlready-used handles (must not duplicate): "
-                + ", ".join(all_handles_so_far)
+            if all_handles_so_far:
+                user_message += (
+                    "\n\nAlready-used handles (must not duplicate): "
+                    + ", ".join(all_handles_so_far)
+                )
+
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": user_message}],
+                system=HANDLE_RULES_PROMPT,
             )
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            messages=[{"role": "user", "content": user_message}],
-            system=HANDLE_RULES_PROMPT,
-        )
+            response_text = message.content[0].text.strip()
 
-        response_text = message.content[0].text.strip()
+            # Strip markdown code fences if present
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                lines = [l for l in lines[1:] if l.strip() != "```"]
+                response_text = "\n".join(lines)
 
-        # Strip markdown code fences if present
-        if response_text.startswith("```"):
-            lines = response_text.split("\n")
-            # Remove first line (```json or ```) and last line (```)
-            lines = [l for l in lines[1:] if l.strip() != "```"]
-            response_text = "\n".join(lines)
+            try:
+                results = json.loads(response_text)
+                all_results.extend(results)
+                all_handles_so_far.extend(r["handle"] for r in results)
+            except json.JSONDecodeError:
+                return jsonify({"error": "Failed to parse AI response", "raw": response_text}), 500
 
-        try:
-            results = json.loads(response_text)
-            all_results.extend(results)
-            all_handles_so_far.extend(r["handle"] for r in results)
-        except json.JSONDecodeError:
-            return jsonify({"error": "Failed to parse AI response", "raw": response_text}), 500
+        return jsonify({"results": all_results})
 
-    return jsonify({"results": all_results})
+    except AuthenticationError:
+        return jsonify({"error": "Invalid API key. Check your ANTHROPIC_API_KEY in the .env file."}), 401
+    except APIError as e:
+        return jsonify({"error": f"Anthropic API error: {str(e)}"}), 502
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 
 @app.route("/upload", methods=["POST"])
