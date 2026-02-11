@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify Handle Generator</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            padding: 2rem;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #5c6ac4;
+            background: #f9f9ff;
+        }
+        .upload-area input { display: none; }
+        .upload-area p { margin: 0.5rem 0; }
+        .upload-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+        .btn {
+            background: #5c6ac4;
+            color: #fff;
+            border: none;
+            padding: 0.7rem 1.5rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #4a58b0; }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #fff;
+            color: #5c6ac4;
+            border: 1px solid #5c6ac4;
+        }
+        .btn-secondary:hover { background: #f0f1ff; }
+        .btn-group {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .product-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #555;
+        }
+        .product-count {
+            font-weight: 600;
+            color: #5c6ac4;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: #666;
+            position: sticky;
+            top: 0;
+        }
+        td { font-size: 0.9rem; }
+        .handle-cell {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: #2e7d32;
+        }
+        .results-table-wrapper {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #fff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-text {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+        .error {
+            color: #c62828;
+            background: #ffebee;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .hidden { display: none; }
+        .row-num {
+            color: #999;
+            width: 40px;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Shopify Handle Generator</h1>
+        <p class="subtitle">Upload an Excel file with product names to generate clean, SEO-friendly Shopify handles.</p>
+
+        <!-- Upload Card -->
+        <div class="card" id="upload-card">
+            <div class="upload-area" id="upload-area">
+                <input type="file" id="file-input" accept=".xlsx,.xls">
+                <div class="upload-icon">&#128196;</div>
+                <p><strong>Drop your Excel file here</strong> or click to browse</p>
+                <p style="font-size:0.85rem; color:#999;">.xlsx files with product names</p>
+            </div>
+            <div id="file-info" class="hidden" style="margin-top:1rem;">
+                <div class="file-info">
+                    <span id="file-name"></span>
+                </div>
+                <div id="product-preview" class="product-list"></div>
+                <p>Found <span class="product-count" id="product-count">0</span> products</p>
+                <div class="btn-group">
+                    <button class="btn" id="generate-btn" onclick="generateHandles()">Generate Handles</button>
+                    <button class="btn btn-secondary" onclick="resetUpload()">Choose Different File</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Card -->
+        <div class="card hidden" id="progress-card">
+            <div class="progress-text">
+                <div class="spinner" style="border-color:#5c6ac4; border-top-color:transparent; width:24px; height:24px;"></div>
+                <p style="margin-top:1rem;" id="progress-text">Generating handles with Claude AI...</p>
+            </div>
+        </div>
+
+        <!-- Results Card -->
+        <div class="card hidden" id="results-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="font-size:1.2rem;">Generated Handles</h2>
+                <div class="btn-group" style="margin-top:0;">
+                    <button class="btn" onclick="downloadExcel()">Download Excel</button>
+                    <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
+                </div>
+            </div>
+            <div class="results-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="row-num">#</th>
+                            <th>Product Name</th>
+                            <th>Handle</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Error display -->
+        <div class="error hidden" id="error-msg"></div>
+    </div>
+
+    <script>
+        let productNames = [];
+        let results = [];
+
+        // Drag and drop
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+
+        async function handleFile(file) {
+            hideError();
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    showError(data.error || 'Upload failed');
+                    return;
+                }
+
+                productNames = data.product_names;
+                document.getElementById('file-name').textContent = file.name;
+                document.getElementById('product-count').textContent = productNames.length;
+                document.getElementById('product-preview').textContent = productNames.slice(0, 20).join('\n') +
+                    (productNames.length > 20 ? `\n... and ${productNames.length - 20} more` : '');
+
+                uploadArea.classList.add('hidden');
+                document.getElementById('file-info').classList.remove('hidden');
+            } catch (err) {
+                showError('Failed to upload file: ' + err.message);
+            }
+        }
+
+        async function generateHandles() {
+            hideError();
+            document.getElementById('upload-card').classList.add('hidden');
+            document.getElementById('progress-card').classList.remove('hidden');
+
+            try {
+                const resp = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_names: productNames }),
+                });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    showError(data.error || 'Generation failed');
+                    document.getElementById('progress-card').classList.add('hidden');
+                    document.getElementById('upload-card').classList.remove('hidden');
+                    return;
+                }
+
+                results = data.results;
+                renderResults();
+                document.getElementById('progress-card').classList.add('hidden');
+                document.getElementById('results-card').classList.remove('hidden');
+            } catch (err) {
+                showError('Failed to generate handles: ' + err.message);
+                document.getElementById('progress-card').classList.add('hidden');
+                document.getElementById('upload-card').classList.remove('hidden');
+            }
+        }
+
+        function renderResults() {
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            results.forEach((r, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="row-num">${i + 1}</td>
+                    <td>${escapeHtml(r.product_name)}</td>
+                    <td class="handle-cell">${escapeHtml(r.handle)}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function downloadExcel() {
+            try {
+                const resp = await fetch('/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ results }),
+                });
+
+                if (!resp.ok) {
+                    showError('Download failed');
+                    return;
+                }
+
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'shopify_handles.xlsx';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                showError('Download failed: ' + err.message);
+            }
+        }
+
+        function resetUpload() {
+            productNames = [];
+            results = [];
+            fileInput.value = '';
+            uploadArea.classList.remove('hidden');
+            document.getElementById('file-info').classList.add('hidden');
+            document.getElementById('upload-card').classList.remove('hidden');
+            document.getElementById('progress-card').classList.add('hidden');
+            document.getElementById('results-card').classList.add('hidden');
+            hideError();
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error-msg');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('error-msg').classList.add('hidden');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
