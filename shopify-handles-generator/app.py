@@ -45,52 +45,43 @@ def generate_handles():
 
     data = request.get_json()
     product_names = data.get("product_names", [])
+    existing_handles = data.get("existing_handles", [])
 
     if not product_names:
         return jsonify({"error": "No product names provided"}), 400
 
     try:
-        # Process in batches of 50 to avoid token limits
-        batch_size = 50
-        all_results = []
-        all_handles_so_far = []
+        user_message = "Generate Shopify handles for these products:\n\n"
+        for j, name in enumerate(product_names, 1):
+            user_message += f"{j}. {name}\n"
 
-        for i in range(0, len(product_names), batch_size):
-            batch = product_names[i : i + batch_size]
-
-            user_message = "Generate Shopify handles for these products:\n\n"
-            for j, name in enumerate(batch, 1):
-                user_message += f"{j}. {name}\n"
-
-            if all_handles_so_far:
-                user_message += (
-                    "\n\nAlready-used handles (must not duplicate): "
-                    + ", ".join(all_handles_so_far)
-                )
-
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                messages=[{"role": "user", "content": user_message}],
-                system=HANDLE_RULES_PROMPT,
+        if existing_handles:
+            user_message += (
+                "\n\nAlready-used handles (must not duplicate): "
+                + ", ".join(existing_handles)
             )
 
-            response_text = message.content[0].text.strip()
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": user_message}],
+            system=HANDLE_RULES_PROMPT,
+        )
 
-            # Strip markdown code fences if present
-            if response_text.startswith("```"):
-                lines = response_text.split("\n")
-                lines = [l for l in lines[1:] if l.strip() != "```"]
-                response_text = "\n".join(lines)
+        response_text = message.content[0].text.strip()
 
-            try:
-                results = json.loads(response_text)
-                all_results.extend(results)
-                all_handles_so_far.extend(r["handle"] for r in results)
-            except json.JSONDecodeError:
-                return jsonify({"error": "Failed to parse AI response", "raw": response_text}), 500
+        # Strip markdown code fences if present
+        if response_text.startswith("```"):
+            lines = response_text.split("\n")
+            lines = [l for l in lines[1:] if l.strip() != "```"]
+            response_text = "\n".join(lines)
 
-        return jsonify({"results": all_results})
+        try:
+            results = json.loads(response_text)
+        except json.JSONDecodeError:
+            return jsonify({"error": "Failed to parse AI response", "raw": response_text}), 500
+
+        return jsonify({"results": results})
 
     except AuthenticationError:
         return jsonify({"error": "Invalid API key. Check your ANTHROPIC_API_KEY in the .env file."}), 401

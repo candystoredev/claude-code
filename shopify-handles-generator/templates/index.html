@@ -271,22 +271,36 @@
             document.getElementById('upload-card').classList.add('hidden');
             document.getElementById('progress-card').classList.remove('hidden');
 
-            try {
-                const resp = await fetch('/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ product_names: productNames }),
-                });
-                const data = await resp.json();
+            const batchSize = 50;
+            const totalBatches = Math.ceil(productNames.length / batchSize);
+            results = [];
+            let allHandles = [];
 
-                if (!resp.ok) {
-                    showError(data.error || 'Generation failed');
-                    document.getElementById('progress-card').classList.add('hidden');
-                    document.getElementById('upload-card').classList.remove('hidden');
-                    return;
+            try {
+                for (let i = 0; i < productNames.length; i += batchSize) {
+                    const batchNum = Math.floor(i / batchSize) + 1;
+                    document.getElementById('progress-text').textContent =
+                        `Processing batch ${batchNum} of ${totalBatches} (${Math.min(i + batchSize, productNames.length)} of ${productNames.length} products)...`;
+
+                    const batch = productNames.slice(i, i + batchSize);
+                    const resp = await fetch('/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ product_names: batch, existing_handles: allHandles }),
+                    });
+                    const data = await resp.json();
+
+                    if (!resp.ok) {
+                        showError(data.error || 'Generation failed');
+                        document.getElementById('progress-card').classList.add('hidden');
+                        document.getElementById('upload-card').classList.remove('hidden');
+                        return;
+                    }
+
+                    results = results.concat(data.results);
+                    allHandles = allHandles.concat(data.results.map(r => r.handle));
                 }
 
-                results = data.results;
                 renderResults();
                 document.getElementById('progress-card').classList.add('hidden');
                 document.getElementById('results-card').classList.remove('hidden');
