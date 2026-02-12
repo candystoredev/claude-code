@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install Doppler CLI
-RUN apt-get update && apt-get install -y curl && \
+RUN apt-get update && apt-get install -y curl gnupg && \
     curl -sLf --retry 3 --tlsv1.2 --proto '=https' 'https://cli.doppler.com/install.sh' | sh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
