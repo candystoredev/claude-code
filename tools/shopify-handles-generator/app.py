@@ -12,6 +12,8 @@ load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB limit
 
+PREFIX = "/shopify-handles-generator"
+
 api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 client = Anthropic(api_key=api_key) if api_key else None
 
@@ -33,12 +35,12 @@ You MUST return ONLY valid JSON — an array of objects with "product_name" and 
 Track all handles in this batch and ensure uniqueness. If two products would produce the same handle, add a minimal distinguisher to the second one."""
 
 
-@app.route("/")
+@app.route(PREFIX + "/")
 def index():
     return render_template("index.html")
 
 
-@app.route("/generate", methods=["POST"])
+@app.route(PREFIX + "/generate", methods=["POST"])
 def generate_handles():
     if not client:
         return jsonify({"error": "ANTHROPIC_API_KEY is not set. Add it to your .env file and restart the server."}), 500
@@ -91,7 +93,7 @@ def generate_handles():
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 
-@app.route("/upload", methods=["POST"])
+@app.route(PREFIX + "/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -136,7 +138,7 @@ def upload_file():
     })
 
 
-@app.route("/download", methods=["POST"])
+@app.route(PREFIX + "/download", methods=["POST"])
 def download_file():
     data = request.get_json()
     results = data.get("results", [])

@@ -245,7 +245,7 @@
             formData.append('file', file);
 
             try {
-                const resp = await fetch('/upload', { method: 'POST', body: formData });
+                const resp = await fetch('/shopify-handles-generator/upload', { method: 'POST', body: formData });
                 const data = await resp.json();
 
                 if (!resp.ok) {
@@ -283,7 +283,7 @@
                         `Processing batch ${batchNum} of ${totalBatches} (${Math.min(i + batchSize, productNames.length)} of ${productNames.length} products)...`;
 
                     const batch = productNames.slice(i, i + batchSize);
-                    const resp = await fetch('/generate', {
+                    const resp = await fetch('/shopify-handles-generator/generate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ product_names: batch, existing_handles: allHandles }),
@@ -325,7 +325,7 @@
 
         async function downloadExcel() {
             try {
-                const resp = await fetch('/download', {
+                const resp = await fetch('/shopify-handles-generator/download', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ results }),
