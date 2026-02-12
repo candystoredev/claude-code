@@ -1,0 +1,8 @@
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "curl -sLf --retry 3 --tlsv1.2 --proto '=https' 'https://cli.doppler.com/install.sh' | sh"
+]
+
+[start]
+cmd = "doppler run -- gunicorn app:app --bind 0.0.0.0:$PORT"
