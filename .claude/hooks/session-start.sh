@@ -6,12 +6,12 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-cd "$CLAUDE_PROJECT_DIR/shopify-handles-generator"
-
-# Install Python dependencies
+# Install Python dependencies for all tools
 # --break-system-packages: needed in container environments
 # --ignore-installed: avoids conflicts with debian-managed packages
-pip install --break-system-packages --ignore-installed -r requirements.txt
+for req in "$CLAUDE_PROJECT_DIR"/tools/*/requirements.txt; do
+  [ -f "$req" ] && pip install --break-system-packages --ignore-installed -r "$req"
+done
 
 # Install linter for code quality checks
 pip install --break-system-packages ruff
