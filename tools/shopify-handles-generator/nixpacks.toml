@@ -1,6 +1,11 @@
+providers = ["python"]
+
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
 [phases.install]
 cmds = [
-  "pip install -r requirements.txt",
+  "python -m pip install -r requirements.txt",
   "curl -sLf --retry 3 --tlsv1.2 --proto '=https' 'https://cli.doppler.com/install.sh' | sh"
 ]
 
