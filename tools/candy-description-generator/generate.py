@@ -61,6 +61,22 @@ def get_image_media_type(url: str) -> str:
     return "image/jpeg"
 
 
+def _build_assistant_prefill(row: dict) -> str:
+    """Build a short assistant prefill to steer the model into the right format.
+
+    Uses the brand/vendor name so the model continues naturally into
+    the opening paragraph instead of choosing its own format.
+    """
+    vendor = (row.get("Vendor") or "").strip()
+    if vendor:
+        return f"{vendor} "
+    # Fall back to first word of the title
+    title = (row.get("Title") or "").strip()
+    if title:
+        return f"{title.split()[0]} "
+    return ""
+
+
 def generate_description(client: anthropic.Anthropic, row: dict) -> str:
     """Call Claude API with image + text prompt for a single product."""
     user_text = build_user_prompt(row)
@@ -81,14 +97,20 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
 
     content.append({"type": "text", "text": user_text})
 
+    prefill = _build_assistant_prefill(row)
+    messages = [{"role": "user", "content": content}]
+    if prefill:
+        messages.append({"role": "assistant", "content": prefill})
+
     message = client.messages.create(
         model=config.API_MODEL,
         max_tokens=config.API_MAX_TOKENS,
         system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
+        messages=messages,
     )
 
-    return message.content[0].text.strip()
+    # Prepend the prefill since the API response continues from it
+    return (prefill + message.content[0].text).strip()
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
