@@ -38,6 +38,7 @@ Specificity:
 - Include clear packaging details ("17.8 lb case") and piece counts when available.
 
 Formatting:
+- Use a hyphen-space ("- ") for bullet points. Never use special bullet characters like "•" or "‚Ä¢".
 - Maximum 2 sentences per paragraph.
 - Add a blank line between every paragraph for scannability.
 - Think mobile-first — prioritize white space and breathing room.

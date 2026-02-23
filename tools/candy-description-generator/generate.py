@@ -88,7 +88,10 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
         messages=[{"role": "user", "content": content}],
     )
 
-    return message.content[0].text.strip()
+    text = message.content[0].text.strip()
+    # Replace Unicode bullets with plain hyphens to avoid encoding issues
+    text = text.replace("\u2022", "-")
+    return text
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
