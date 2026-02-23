@@ -55,7 +55,24 @@ Avoid:
 
 Use natural, conversational language that customers actually search for. Write for humans first, search engines second.
 Include use-case phrases like "perfect for," "ideal for," "great for" naturally.
-Do not invent details not present in the provided information or image."""
+Do not invent details not present in the provided information or image.
+
+IMPORTANT: You MUST follow the exact output structure shown in this example. Every description must have opening paragraphs, then a bullet list, then closing paragraphs.
+
+Example output:
+
+Haribo Goldbears Gummy Bears in a 5 lb bulk bag — approximately 750 individually wrapped fun-size packs. A classic gummy candy that's been a fan favorite since 1922.
+
+Stock up on one of the most recognized gummy brands in the world for your next big event.
+
+- 5 lb bag, approximately 750 individually wrapped packs
+- Five fruit flavors: strawberry, lemon, orange, raspberry, and pineapple
+- Each pack contains 3-4 mini gummy bears
+- Kosher certified, gluten-free, no artificial colors
+
+Individually wrapped Goldbears are ideal for Halloween candy bowls, birthday party favor bags, and office candy dishes. The resealable bulk bag keeps them fresh between events.
+
+Haribo has been crafting gummy bears in Germany since 1922 — this is the original recipe loved worldwide. Buying in bulk saves per-piece cost compared to single retail bags."""
 
 
 def build_user_prompt(row: dict) -> str:
