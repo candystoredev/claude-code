@@ -38,9 +38,8 @@ Specificity:
 - Include clear packaging details ("17.8 lb case") and piece counts when available.
 
 Formatting:
-- Use a hyphen-space ("- ") for bullet points. Never use special bullet characters like "•" or "‚Ä¢".
+- Output HTML. Wrap paragraphs in <p> tags. Wrap bullet lists in <ul>/<li> tags.
 - Maximum 2 sentences per paragraph.
-- Add a blank line between every paragraph for scannability.
 - Think mobile-first — prioritize white space and breathing room.
 
 Word count by complexity:
@@ -91,7 +90,7 @@ def build_user_prompt(row: dict) -> str:
         parts.append(f"Additional details: {' | '.join(minis)}")
 
     parts.append(
-        "\nWrite a product description following the rules (opening paragraphs, bullet points, closing paragraphs). Return only the description text, nothing else."
+        "\nWrite a product description following the rules (opening paragraphs, bullet points, closing paragraphs). Output as HTML using <p> and <ul>/<li> tags. Return only the HTML, nothing else."
     )
 
     return "\n".join(parts)
