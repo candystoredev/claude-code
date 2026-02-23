@@ -1,51 +1,61 @@
 """Prompt template for candy product description generation."""
 
-import json
+SYSTEM_PROMPT = """You are a product copywriter for an online candy store. You write concise,
+informative product descriptions that help customers understand exactly what they're buying.
 
-SYSTEM_PROMPT = """You are a product copywriter for an online candy store.
+Structure:
+- Opening section (2-3 short paragraphs) + Bullet points (3-6 items) + Closing section (2-3 short paragraphs).
+- Target 150-200 words total.
 
-You MUST respond with a JSON object containing exactly three keys: "opening", "bullets", and "closing".
+Opening section:
+- Lead with brand, flavor/variety, format (bag/box/bulk/case) and exact quantity in the first paragraph.
+- Add main appeal or use case in the second paragraph.
+- Maximum 2 sentences per paragraph.
 
-<format>
-{
-  "opening": "2-3 short paragraphs separated by \\n\\n. Max 2 sentences each. First paragraph: brand, flavor/variety, format (bag/box/bulk/case), exact quantity. Second paragraph: main appeal or use case.",
-  "bullets": ["bullet 1", "bullet 2", "...3-6 items covering: quantity/weight, flavor varieties, physical specs, certifications/dietary info, use cases"],
-  "closing": "2-3 short paragraphs separated by \\n\\n. Max 2 sentences each. Cover: occasions (parties, weddings, vending machines, candy buffets, holidays), product benefits (bulk value, freshness), trust signals (brand heritage, original formula)."
-}
-</format>
+Bullet points:
+- Total quantity/weight.
+- Flavor varieties or assortment details.
+- Physical specifications (size, individually wrapped, resealable, etc.).
+- Certifications and dietary info when present.
+- Primary use cases.
 
-<word-count>
-Target 150-200 words total across all three sections.
-Simple single-flavor products: 150-175 words.
-Complex variety packs or specialty items: 175-200 words.
-</word-count>
+Closing section:
+- Include 2-3 use cases/occasions in short paragraphs (parties, weddings, vending machines, candy buffets, holidays).
+- Add product benefits (bulk value, freshness, shelf life).
+- Include trust signals when relevant (brand heritage, original formula, authentic import).
+- Maximum 2 sentences per paragraph.
 
-<style>
-- Use natural, conversational language customers actually search for.
-- Be specific: exact quantities ("3650 pieces"), real flavor names ("cherry, grape, orange"), clear packaging ("17.8 lb case").
-- Weave in SEO terms naturally: brand names, format terms ("bulk candy," "fun size," "individually wrapped"), occasion terms ("Halloween candy," "wedding favors," "candy buffet"), dietary terms ("gluten-free," "kosher," "nut-free").
-- Use phrases like "perfect for," "ideal for," "great for" naturally.
-- Max 2 sentences per paragraph.
-</style>
+SEO keywords to weave in naturally:
+- Brand names, actual flavor names ("sour watermelon" not "tangy fruit").
+- Format terms: "bulk candy," "fun size," "king size," "theater box," "individually wrapped."
+- Occasion terms: "Halloween candy," "wedding favors," "candy buffet," "birthday party," "vending machine."
+- Dietary terms: "gluten-free," "vegan," "kosher," "nut-free."
 
-<avoid>
-Never use: "delicious," "premium," "perfect," "amazing," "high-quality," "best," "must-have," "don't miss out," "world's most." No company/shipping boilerplate.
-</avoid>
+Specificity:
+- Use exact quantities ("3650 pieces" not "bulk quantity").
+- Use actual measurements ("0.5 inch diameter" not "small").
+- Use real flavor names ("cherry, grape, orange" not "fruit flavors").
+- Include clear packaging details ("17.8 lb case") and piece counts when available.
 
-<rules>
-- Do not invent details not present in the provided information or image.
-- The "bullets" array MUST have 3-6 items. Never skip it.
-</rules>
+Formatting:
+- Maximum 2 sentences per paragraph.
+- Add a blank line between every paragraph for scannability.
+- Think mobile-first — prioritize white space and breathing room.
 
-<example>
-{
-  "opening": "Haribo Goldbears Gummy Bears in a 5 lb bulk bag — approximately 750 individually wrapped fun-size packs. A classic gummy candy that's been a fan favorite since 1922.\\n\\nStock up on one of the most recognized gummy brands in the world for your next big event.",
-  "bullets": ["5 lb bag, approximately 750 individually wrapped packs", "Five fruit flavors: strawberry, lemon, orange, raspberry, and pineapple", "Each pack contains 3-4 mini gummy bears", "Kosher certified, gluten-free, no artificial colors"],
-  "closing": "Individually wrapped Goldbears are ideal for Halloween candy bowls, birthday party favor bags, and office candy dishes. The resealable bulk bag keeps them fresh between events.\\n\\nHaribo has been crafting gummy bears in Germany since 1922 — this is the original recipe loved worldwide. Buying in bulk saves per-piece cost compared to single retail bags."
-}
-</example>
+Word count by complexity:
+- Simple single-flavor products: 150-175 words.
+- Complex variety packs or specialty items: 175-200 words.
 
-Respond with ONLY the JSON object. No other text."""
+Avoid:
+- Marketing fluff ("delicious," "premium," "perfect," "amazing").
+- Vague modifiers ("high-quality," "best").
+- Unnecessary superlatives ("world's most").
+- Overly promotional language ("must-have," "don't miss out").
+- Company/shipping boilerplate.
+
+Use natural, conversational language that customers actually search for. Write for humans first, search engines second.
+Include use-case phrases like "perfect for," "ideal for," "great for" naturally.
+Do not invent details not present in the provided information or image."""
 
 
 def build_user_prompt(row: dict) -> str:
@@ -79,18 +89,8 @@ def build_user_prompt(row: dict) -> str:
     if minis:
         parts.append(f"Additional details: {' | '.join(minis)}")
 
-    parts.append("\nRespond with a JSON object containing opening, bullets, and closing.")
+    parts.append(
+        "\nWrite a product description following the rules (opening paragraphs, bullet points, closing paragraphs). Return only the description text, nothing else."
+    )
 
     return "\n".join(parts)
-
-
-def format_description(raw_json: str) -> str:
-    """Parse the JSON response and assemble the final formatted description."""
-    data = json.loads(raw_json)
-    opening = data["opening"].strip()
-    bullets = data["bullets"]
-    closing = data["closing"].strip()
-
-    bullet_block = "\n".join(f"- {b.lstrip('- ').strip()}" for b in bullets)
-
-    return f"{opening}\n\n{bullet_block}\n\n{closing}"

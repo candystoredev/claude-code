@@ -25,7 +25,7 @@ import time
 import anthropic
 
 import config
-from prompt_template import SYSTEM_PROMPT, build_user_prompt, format_description
+from prompt_template import SYSTEM_PROMPT, build_user_prompt
 
 
 def load_input_csv(filepath: str) -> list[dict]:
@@ -81,21 +81,14 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
 
     content.append({"type": "text", "text": user_text})
 
-    # Prefill with opening brace to force JSON output
-    messages = [
-        {"role": "user", "content": content},
-        {"role": "assistant", "content": "{"},
-    ]
-
     message = client.messages.create(
         model=config.API_MODEL,
         max_tokens=config.API_MAX_TOKENS,
         system=SYSTEM_PROMPT,
-        messages=messages,
+        messages=[{"role": "user", "content": content}],
     )
 
-    raw_json = "{" + message.content[0].text
-    return format_description(raw_json)
+    return message.content[0].text.strip()
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
