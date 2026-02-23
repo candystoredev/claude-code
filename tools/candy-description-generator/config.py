@@ -4,7 +4,7 @@ import os
 
 # Claude API settings
 API_MODEL = "claude-sonnet-4-20250514"
-API_MAX_TOKENS = 300
+API_MAX_TOKENS = 500
 
 # Rate limiting
 REQUESTS_PER_SECOND = 1  # Conservative: 1 req/sec (~80 min for 5000 products)
