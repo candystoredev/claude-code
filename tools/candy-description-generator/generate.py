@@ -94,7 +94,7 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
 def init_output_csv(filepath: str, fieldnames: list[str]):
     """Create the output CSV with headers if it doesn't exist."""
     if not os.path.exists(filepath):
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
+        with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
 
