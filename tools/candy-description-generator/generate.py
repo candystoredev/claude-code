@@ -25,7 +25,7 @@ import time
 import anthropic
 
 import config
-from prompt_template import SYSTEM_PROMPT, build_user_prompt
+from prompt_template import SYSTEM_PROMPT, build_user_prompt, format_description
 
 
 def load_input_csv(filepath: str) -> list[dict]:
@@ -61,22 +61,6 @@ def get_image_media_type(url: str) -> str:
     return "image/jpeg"
 
 
-def _build_assistant_prefill(row: dict) -> str:
-    """Build a short assistant prefill to steer the model into the right format.
-
-    Uses the brand/vendor name so the model continues naturally into
-    the opening paragraph instead of choosing its own format.
-    """
-    vendor = (row.get("Vendor") or "").strip()
-    if vendor:
-        return f"{vendor} "
-    # Fall back to first word of the title
-    title = (row.get("Title") or "").strip()
-    if title:
-        return f"{title.split()[0]} "
-    return ""
-
-
 def generate_description(client: anthropic.Anthropic, row: dict) -> str:
     """Call Claude API with image + text prompt for a single product."""
     user_text = build_user_prompt(row)
@@ -97,10 +81,11 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
 
     content.append({"type": "text", "text": user_text})
 
-    prefill = _build_assistant_prefill(row)
-    messages = [{"role": "user", "content": content}]
-    if prefill:
-        messages.append({"role": "assistant", "content": prefill})
+    # Prefill with opening brace to force JSON output
+    messages = [
+        {"role": "user", "content": content},
+        {"role": "assistant", "content": "{"},
+    ]
 
     message = client.messages.create(
         model=config.API_MODEL,
@@ -109,8 +94,8 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
         messages=messages,
     )
 
-    # Prepend the prefill since the API response continues from it
-    return (prefill + message.content[0].text).strip()
+    raw_json = "{" + message.content[0].text
+    return format_description(raw_json)
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
