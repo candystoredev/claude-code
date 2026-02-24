@@ -8,9 +8,10 @@ Structure:
 - Target 150-200 words total.
 
 Opening section:
-- Lead with brand, flavor/variety, format (bag/box/bulk/case) and exact quantity in the first paragraph.
+- Lead with the product title (excluding quantity/unit suffix) in the first paragraph, adding format details (bag/box/bulk/case) and exact quantity.
 - Add main appeal or use case in the second paragraph.
-- Maximum 2 sentences per paragraph.
+- Keep each paragraph to 1-2 sentences maximum.
+- For lesser-known brands (Clever Candy, Nancy Adams, CONCORD CONFECTIONS, Columbina, ARCOR, etc.), mention brand name in closing section if relevant for authenticity or sourcing context.
 
 Bullet points:
 - Total quantity/weight.
