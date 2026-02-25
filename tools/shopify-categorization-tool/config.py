@@ -3,14 +3,14 @@
 import os
 
 # Claude API settings
-API_MODEL = "claude-sonnet-4-20250514"
+API_MODEL = "claude-haiku-4-5-20251001"  # Haiku: ~10x cheaper than Sonnet, fast enough for categorization
 API_MAX_TOKENS = 4096
 
 # Rate limiting
 REQUESTS_PER_SECOND = 1
 
 # Batch settings
-BATCH_SIZE = 10  # Products per API call
+BATCH_SIZE = 20  # Products per API call (higher = fewer calls = cheaper)
 SAVE_EVERY_N = 5  # Save progress every N batches
 
 # File paths

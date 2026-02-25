@@ -116,19 +116,36 @@ def categorize_batch(
     system_prompt: str,
     products: list[dict],
     valid_handles: set[str],
+    usage_stats: dict,
 ) -> dict[str, list[str]]:
     """Call Claude API to categorize a batch of products.
 
     Returns dict mapping product handle -> list of collection handles.
+    Uses prompt caching to avoid re-sending the 258-collection system prompt each time.
     """
     user_prompt = build_user_prompt(products)
 
     message = client.messages.create(
         model=config.API_MODEL,
         max_tokens=config.API_MAX_TOKENS,
-        system=system_prompt,
+        # System prompt as content block with cache_control for prompt caching.
+        # The collections list (~2K tokens) gets cached and reused across all batches.
+        system=[
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[{"role": "user", "content": user_prompt}],
     )
+
+    # Track token usage for cost reporting
+    usage = message.usage
+    usage_stats["input_tokens"] += usage.input_tokens
+    usage_stats["output_tokens"] += usage.output_tokens
+    usage_stats["cache_creation_tokens"] += getattr(usage, "cache_creation_input_tokens", 0)
+    usage_stats["cache_read_tokens"] += getattr(usage, "cache_read_input_tokens", 0)
 
     response_text = message.content[0].text.strip()
 
@@ -264,6 +281,15 @@ def main():
     processed = 0
     errors = 0
     buffer = []
+    usage_stats = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 0,
+    }
+
+    print(f"Using model: {config.API_MODEL} with prompt caching enabled")
+    print(f"Batch size: {batch_size} products/call ({total_batches} API calls total)\n")
 
     for batch_num in range(total_batches):
         start = batch_num * batch_size
@@ -279,7 +305,7 @@ def main():
         )
 
         try:
-            result = categorize_batch(client, system_prompt, batch, valid_handles)
+            result = categorize_batch(client, system_prompt, batch, valid_handles, usage_stats)
 
             for p in batch:
                 collections_list = result.get(p["handle"], [])
@@ -344,6 +370,19 @@ def main():
     print(f"Processed: {processed}")
     print(f"Errors: {errors}")
     print(f"Output: {output_path}")
+
+    # Cost report
+    print("\n--- Token Usage ---")
+    print(f"Input tokens:          {usage_stats['input_tokens']:,}")
+    print(f"Output tokens:         {usage_stats['output_tokens']:,}")
+    print(f"Cache creation tokens: {usage_stats['cache_creation_tokens']:,}")
+    print(f"Cache read tokens:     {usage_stats['cache_read_tokens']:,}")
+    if usage_stats["cache_read_tokens"] > 0:
+        total_input = usage_stats["input_tokens"] + usage_stats["cache_read_tokens"]
+        cache_hit_pct = usage_stats["cache_read_tokens"] / total_input * 100
+        print(f"Cache hit rate:        {cache_hit_pct:.1f}%")
+        saved = usage_stats["cache_read_tokens"] * 0.9  # Cache reads are 90% cheaper
+        print(f"Tokens saved by cache: ~{saved:,.0f} (90% discount on cached input)")
 
 
 if __name__ == "__main__":
