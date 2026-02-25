@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collection Categorization Review</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+
+  .header { background: #1a1a2e; color: #fff; padding: 20px 32px; position: sticky; top: 0; z-index: 10; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header p { font-size: 13px; color: #aaa; margin-top: 4px; }
+
+  .controls { display: flex; align-items: center; gap: 16px; padding: 16px 32px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 68px; z-index: 9; flex-wrap: wrap; }
+  .controls label { font-weight: 600; font-size: 14px; }
+  .stats { margin-left: auto; font-size: 13px; color: #666; }
+  .filter-group { display: flex; gap: 8px; align-items: center; }
+  .filter-group input[type="text"] { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; width: 240px; }
+  .filter-group select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+
+  .btn { background: #5c6ac4; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+  .btn:hover { background: #4a58b0; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+  .btn-outline { background: #fff; color: #5c6ac4; border: 1px solid #5c6ac4; }
+  .btn-outline:hover { background: #f0f1ff; }
+  .btn-danger { background: #fff; color: #c62828; border: 1px solid #e57373; }
+  .btn-danger:hover { background: #ffebee; }
+
+  .drop-zone { margin: 40px 32px; padding: 60px; border: 2px dashed #ccc; border-radius: 8px; text-align: center; color: #999; font-size: 16px; transition: all .2s; }
+  .drop-zone.drag-over { border-color: #5c6ac4; background: #eef4fb; color: #5c6ac4; }
+
+  .cards { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); overflow: hidden; }
+  .card-title { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .card-title h2 { font-size: 15px; font-weight: 600; }
+  .card-title .vendor { font-size: 12px; color: #888; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; }
+  .card-title .handle { font-size: 12px; color: #999; font-family: 'SF Mono', 'Fira Code', monospace; margin-left: auto; }
+  .card-title .collection-count { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8eaf6; color: #3f51b5; }
+
+  .card-body { padding: 16px 20px; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 14px; font-size: 13px; transition: all 0.15s; }
+  .tag:hover { background: #c8e6c9; }
+  .tag .tag-title { font-size: 11px; color: #66bb6a; margin-left: 2px; }
+  .tag .remove-tag { cursor: pointer; color: #a5d6a7; font-size: 15px; line-height: 1; margin-left: 2px; transition: color 0.15s; }
+  .tag .remove-tag:hover { color: #c62828; }
+
+  .add-collection { position: relative; display: inline-block; }
+  .add-btn { display: inline-flex; align-items: center; gap: 4px; background: #f5f5f5; color: #888; padding: 4px 10px; border-radius: 14px; font-size: 13px; cursor: pointer; border: 1px dashed #ccc; transition: all 0.15s; }
+  .add-btn:hover { border-color: #5c6ac4; color: #5c6ac4; background: #f0f1ff; }
+
+  .dropdown { position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); width: 300px; max-height: 260px; z-index: 20; display: none; }
+  .dropdown.open { display: block; }
+  .dropdown-search { width: 100%; padding: 8px 12px; border: none; border-bottom: 1px solid #eee; font-size: 13px; outline: none; }
+  .dropdown-list { max-height: 210px; overflow-y: auto; }
+  .dropdown-item { padding: 6px 12px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; }
+  .dropdown-item:hover { background: #f0f1ff; }
+  .dropdown-item .di-handle { color: #333; }
+  .dropdown-item .di-title { color: #999; font-size: 11px; }
+  .dropdown-empty { padding: 12px; color: #999; font-size: 13px; text-align: center; }
+
+  .no-collections { color: #999; font-style: italic; font-size: 13px; }
+
+  .edited-marker { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff9800; margin-right: 6px; }
+
+  @media (max-width: 700px) {
+    .controls { flex-direction: column; align-items: flex-start; }
+    .stats { margin-left: 0; }
+    .cards { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Collection Categorization Review</h1>
+  <p>Load the output CSV to review and edit collection assignments before importing to Shopify</p>
+</div>
+
+<div class="controls" id="controls" style="display:none;">
+  <div class="filter-group">
+    <input type="text" id="search" placeholder="Filter by title, handle, or vendor..." />
+  </div>
+  <div class="filter-group">
+    <label>Collections:</label>
+    <select id="collectionFilter">
+      <option value="">All</option>
+      <option value="__none">No collections assigned</option>
+      <option value="__edited">Edited only</option>
+    </select>
+  </div>
+  <div class="stats" id="stats"></div>
+  <button class="btn" onclick="downloadCSV()">Download CSV</button>
+</div>
+
+<div class="drop-zone" id="dropZone">
+  <p><strong>Drop your output CSV here</strong></p>
+  <p style="margin-top:8px;">or <label style="color:#5c6ac4;cursor:pointer;text-decoration:underline;">browse<input type="file" accept=".csv" id="fileInput" style="display:none;" /></label></p>
+  <p style="margin-top:12px;font-size:13px;">Expected file: <code>output/products_categorized.csv</code></p>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<script>
+// Embedded collections (handle -> title)
+const COLLECTIONS = {"4th-of-july-candy":"4th of July Candy","adams-brooks":"Adams & Brooks","albanese":"Albanese","alberts-candy":"Albert's Candy","allan-candy":"Allan Candy","american-licorice":"American Licorice","animals-candy":"Animals Candy","annabelles-candy":"Annabelle's Candy","apple-candy":"Apple Candy","ashers-candy":"Asher's Candy","assorted-colors-candy":"Assorted Colors Candy","assorted-fruit-candy":"Assorted Fruit Candy","atkinsons-candy":"Atkinson's Candy","ausome-candies":"Au'some Candies","baby-showers":"Baby Showers","back-to-school-candy":"Back to School Candy","bagged-candy":"Bagged Candy","baking":"Baking","ball-shaped-candy":"Ball Shaped Candy","banana-candy":"Banana Candy","bar-bat-mitzvah-candy":"Bar & Bat Mitzvah Candy","beach-theme":"Summer & Beach Candy","bee-intl-candy":"BEE Int'l Candy","birthday-party-candy":"Birthday Party Candy","black-candy":"Black Candy","blow-pops":"Blow Pops","blue-candy":"Blue Candy","bogdons-stick-candy":"Bogdon's Stick Candy","bonomo-turkish-taffy":"Bonomo Turkish Taffy","brachs-candy":"Brach's Candy","brand-new-candy-co":"Brand New Candy Co.","brown-candy":"Brown Candy","brown-haley-almonds-roca":"Brown & Haley Almonds Roca","butterfields-candy":"Butterfields Candy","c-howards-candy":"C. Howard's Candy","candy-bars":"Candy Bars","candy-beads-pearls":"Candy Beads & Pearls","candy-buffets":"Candy Buffets","candy-coated-candy":"Candy Coated Candy","candy-planet":"Candy Planet","candy-scoops-display-containers":"Candy Scoops & Display Containers","candy-toys":"Candy Toys","candyrific-candy":"CandyRific Candy","candytech-candy":"CandyTech Candy","cap-candy":"Cap Candy","cape-cod-cranberry-candy":"Cape Cod Cranberry Candy","caramel-candy":"Caramel Candy","carnival-candy":"Carnival Candy","cartoons-candy":"Cartoons Candy","casino-poker-candy":"Casino & Poker Candy","ce-de-candy-candy":"Ce De Candy Candy","charms-candy":"Charms Candy","cherry-candy":"Cherry Candy","chewing-gum":"Chewing Gum","choco-rocks-candy":"Choco Rocks Candy","chocolate-almonds":"Chocolate Almonds","chocolate-animals":"Chocolate Animals","chocolate-baking-bars":"Chocolate Baking Bars","chocolate-bars":"Chocolate Bars","chocolate-bunnies":"Chocolate Bunnies","chocolate-candy":"Chocolate Candy","chocolate-coins-coin-candy":"Chocolate Coins & Coin Candy","chocolate-color-drops":"Chocolate Color Drops","chocolate-fudge":"Chocolate Fudge","chocolate-hearts":"Chocolate Hearts","chocolate-lentils":"Chocolate Lentils","chocolate-mints":"Chocolate Mints","chocolate-peanut-butter-candy":"Chocolate & Peanut Butter Candy","chocolate-sports-balls":"Chocolate Sports Balls","chocolate-stars":"Chocolate Stars","chocolate-truffles-truffle-confections":"Chocolate Truffles & Truffle Confections","christmas-candy":"Christmas Candy","coconut-candy":"Coconut Candy","concord-confections-candy":"Concord Confections Candy","cookies-cookie-dough-candy":"Cookies & Cookie Dough Candy","cookies-gourmet-confections":"Cookies & Gourmet Confections","corporate-events-candy":"Corporate Events Candy","cotton-candy":"Cotton Candy & Cotton Candy-Flavored Candy","cough-drops-hard-candy-drops":"Cough Drops & Hard Candy Drops","crackers-bread":"Crackers & Bread","dorval-candy":"Dorval Candy","doschers-candy":"Doscher's Candy","dried-fruits-veggies":"Dried Fruits & Veggies","dryden-palmer-candy":"Dryden & Palmer Candy","dubble-bubble-gum":"Dubble Bubble Gum","e-frutti-candy":"e.Frutti Candy","easter-candy":"Easter Candy","espeez-candy":"Espeez Candy","extreme-sour-candy":"Extreme Sour Candy","farleys-sathers":"Farley's & Sathers","fathers-day-candy":"Father's Day Candy","ferrara-pan-candy":"Ferrara Pan Candy","ferrero-rocher-candy":"Ferrero Rocher Candy","fizzies-candy-beverage":"Fizzies Candy Beverage","flipsticks-candy":"Flipsticks Candy","foil-wrapped-chocolate-balls":"Foil Wrapped Chocolate Balls","foil-wrapped-chocolate-candy":"Foil Wrapped Chocolate Candy","fralingers-candy":"Fralinger's Candy","frankford-candy":"Frankford Candy","fruit-slices-candy":"Fruit Slices Candy","full-line-vending-machine-candy-wrapped":"Full-Line Vending Machine Candy - Wrapped","fundraising-candy":"Fundraising Candy","gerrit-j-verburg":"Gerrit J. Verburg","giambris-quality-sweets":"Giambri's Quality Sweets","gilliam-candy":"Gilliam Candy","gimbals-gourmet-candy":"Gimbal's Gourmet Candy","ginger-candy":"Ginger Candy","goetzes-candy":"Goetze's Candy","gold-candy":"Gold Candy","golightly-candy":"GoLightly Candy","graham-cracker-candy":"Graham Cracker Candy","granola-breakfast":"Granola & Breakfast","grape-candy":"Grape Candy","green-candy":"Green Candy","gross-out-candy":"Gross Out Candy","guittard-candy":"Guittard Candy","gum-bubblegum-candy":"Gum & Bubblegum Candy","gumballs":"Gumballs","gummy-candy":"Gummy Candy","halloween-candy":"Halloween Candy","halter-bonbons-sugar-free":"Halter BonBons Sugar Free","halvah-candy":"Halvah Candy","hanukkah-candy":"Hanukkah Candy","hard-candy":"Hard Candy","harmony-snacks-candy":"Harmony Snacks Candy","heart-shaped-candy":"Heart Shaped Candy","honey-candy":"Honey Candy","hot-spicy-candy":"Hot & Spicy Candy","hotlix-candy":"Hotlix Candy","impact-confections":"Impact Confections","individually-wrapped-candy":"Individually Wrapped Candy","italian-candy":"Italian Candy","japanese-candy":"Japanese Candy","jawbreakers-candy":"Jawbreakers Candy","jewelry-candy":"Jewelry Candy","joyva-halvah-candy":"Joyva Halvah Candy","judson-atkinson-candy":"Judson-Atkinson Candy","justborn-candy":"JustBorn Candy","kandy-kastle-candy":"Kandy Kastle Candy","kencraft-candy":"Kencraft Candy","kendon-candies":"Kendon Candies","kennys-super-twists":"Kenny's Super Twists","kidsmania":"Kidsmania","kimmie-candy":"Kimmie Candy","king-size-theater-boxes":"King-Size & Theater Boxes","kits-taffy":"Kits Taffy","kokos-candy":"Koko's Candy","kookaburra-liquorice-candy":"Kookaburra Liquorice Candy","koppers-candy":"Koppers Candy","kosher-candy":"Kosher Candy","kosher-candy-list":"Kosher Candy List","lemon-candy":"Lemon Candy","licorice-candy":"Licorice Candy","lime-candy":"Lime Candy","liquid-gel-candy":"Liquid & Gel Candy","lollipops-suckers":"Lollipops & Suckers","loose-vending-machine-candy-unwrapped":"Loose Vending Machine Candy - Unwrapped","lucas-zone":"Lucas Zone","madelaine-candy":"Madelaine Candy","marich-candy":"Marich Candy","mars-candy":"Mars Candy","marshmallow-candy":"Marshmallow Candy","mexican-candy":"Mexican Candy","mini-sized-candy":"Mini-Sized Candy","mints-peppermint-candy":"Mints & Peppermint Candy","mothers-day-candy":"Mother's Day Candy","natural-organic-candy":"Natural & Organic Candy","necco-candy":"Necco Wafers & Candy","nestle-candy":"Nestle Candy","new-years-candy":"New Year's Candy","novelty-candy":"Novelty Candy","nuts-seeds":"Nuts & Seeds","oak-leaf-candy":"Oak Leaf Candy","old-fashioned-candy":"Old-Fashioned Candy","orange-candy":"Orange Candy","orange-flavored-candy":"Orange Flavored Candy","party-favors-gifts-candy":"Party Favors & Gifts Candy","pearsons-candy":"Pearsons Candy","perfetti-van-melle-candy":"Perfetti Van Melle Candy","perugina-candy":"Perugina Candy","pink-candy":"Pink Candy","pirates-candy":"Pirates Candy","powder-candy":"Powder Candy","pretzel-candy-chocolate-covered-pretzels":"Pretzel Candy & Chocolate Covered Pretzels","primrose-candy-company":"Primrose Candy Company","princess-party-candy":"Princess Party Candy","purple-candy":"Purple Candy","raisins-candy-chocolate-covered-raisins":"Raisins Candy & Chocolate Covered Raisins","raspberry-blue-raspberry":"Raspberry & Blue Raspberry","red-candy":"Red Candy","restaurant-hotel-mints":"Restaurant & Hotel Mints","retro":"Retro","ricola-candy":"Ricola Candy","rm-palmer-company":"R.M. Palmer Company","rock-candy-sticks":"Rock Candy Sticks","root-beer-soda-pop":"Root Beer & Soda Pop","round-shaped-candy":"Round Shaped Candy","salt-water-taffy":"Salt Water Taffy","scary-spooky-candy":"Scary & Spooky Candy","sconza-candy":"Sconza Candy","silver-candy":"Silver Candy","sixlets-decorator-colors":"Sixlets Decorator Colors","sixlets-pearl-colors":"Sixlets Pearl Colors","smores-candy":"S'mores Candy","snacks-snack-food":"Snacks & Snack Food","soft-candy":"Soft Candy","sorbee-candy":"Sorbee Candy","sour-balls-candy":"Sour Balls Candy","sour-candy":"Sour Candy","sour-chewy-candy":"Sour Chewy Candy","sour-gummy-candy":"Sour Gummy Candy","sour-hard-candy":"Sour Hard Candy","sour-spray-candy":"Sour Spray Candy","sour-straws-belts":"Sour Straws & Belts","sports-candy":"Sports Candy","squiggly-pops-lollipops":"Squiggly Pops Lollipops","star-shaped-candy":"Star Shaped Candy","stick-candy":"Stick Candy","sticklettes-mini-candy-sticks":"Sticklettes Mini Candy Sticks","strawberry-candy":"Strawberry Candy","sugar-free-candy":"Sugar Free Candy","sunflower-seeds-candy":"Sunflower Seeds Candy","sweets-taffy-candy":"Sweets Taffy & Candy","sweetworks-candy":"Sweetworks Candy","taffy-town":"Taffy Town","teenee-beanee-jelly-beans":"Teenee Beanee Jelly Beans","thanksgiving-autumn":"Thanksgiving & Autumn","thompson-candy":"Thompson Candy","toffee-butter-toffee-candy":"Toffee & Butter Toffee Candy","too-tarts-candy":"Too Tarts Candy","tootsie-candy":"Tootsie Candy","tootsie-pops":"Tootsie Pops","top-candy-buffet-candy":"Top Candy Buffet Candy","top-candy-buffet-desktop":"Top Candy Buffet - Desktop","top-wrapped-candy":"Top Wrapped Candy","top-wrapped-desktop-inactive":"Top Wrapped - Desktop Inactive","toppings-chips":"Toppings & Chips","topps-candy":"Topps Candy","toy-candy":"Toy Candy","tropical-fruit-candy":"Tropical Fruit Candy","twinkle-pop-lollipops":"Twinkle Pop Lollipops","unicorn-pops-unicorn-themed-candy":"Unicorn Pops & Unicorn Themed Candy","unwrapped-loose-candy":"Unwrapped & Loose Candy","valentines-day-candy":"Valentine's Day Candy","vanilla-candy":"Vanilla Candy","vending-machine-candy":"Vending Machine Candy","vidal-candy":"Vidal Candy","watermelon-candy":"Watermelon Candy","wax-candy":"Wax Candy","wedding-candy":"Wedding Candy","whirly-pops":"Whirly Pops","white-candy":"White Candy","wonka-candy":"Wonka Candy","world-confections-candy":"World Confections Candy","wrigley-candy":"Wrigley Candy","yellow-candy":"Yellow Candy","yum-junkie":"Yum Junkie"};
+
+// Sorted list for dropdowns (excluding frontpage/show-all)
+const COLLECTION_LIST = Object.entries(COLLECTIONS)
+  .filter(([h]) => h !== 'frontpage' && h !== 'show-all-products')
+  .sort((a, b) => a[1].localeCompare(b[1]));
+
+let allProducts = [];
+let editedHandles = new Set();
+
+// Populate the collection filter dropdown
+document.addEventListener('DOMContentLoaded', () => {
+  const select = document.getElementById('collectionFilter');
+  COLLECTION_LIST.forEach(([handle, title]) => {
+    const opt = document.createElement('option');
+    opt.value = handle;
+    opt.textContent = title;
+    select.appendChild(opt);
+  });
+});
+
+function parseCSV(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  let row = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { row.push(current); current = ''; }
+      else if (ch === '\n' || (ch === '\r' && text[i + 1] === '\n')) {
+        row.push(current); current = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+        if (ch === '\r') i++;
+      } else { current += ch; }
+    }
+  }
+  if (current || row.length) { row.push(current); rows.push(row); }
+
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.replace(/^\uFEFF/, '').trim());
+  return rows.slice(1).map(r => {
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (r[idx] || '').trim(); });
+    return obj;
+  });
+}
+
+function getCollections(product) {
+  const raw = product['Custom Collections'] || '';
+  if (!raw.trim()) return [];
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function setCollections(product, collections) {
+  product['Custom Collections'] = collections.join(', ');
+}
+
+function removeCollection(handle, collHandle) {
+  const product = allProducts.find(p => p.Handle === handle);
+  if (!product) return;
+  const cols = getCollections(product).filter(c => c !== collHandle);
+  setCollections(product, cols);
+  editedHandles.add(handle);
+  applyFilters();
+}
+
+function addCollection(handle, collHandle) {
+  const product = allProducts.find(p => p.Handle === handle);
+  if (!product) return;
+  const cols = getCollections(product);
+  if (!cols.includes(collHandle)) {
+    cols.push(collHandle);
+    setCollections(product, cols);
+    editedHandles.add(handle);
+  }
+  applyFilters();
+}
+
+function renderCards(products) {
+  const container = document.getElementById('cards');
+  container.innerHTML = '';
+
+  products.forEach(p => {
+    const collections = getCollections(p);
+    const isEdited = editedHandles.has(p.Handle);
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    // Title bar
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'card-title';
+    titleDiv.innerHTML = `
+      ${isEdited ? '<span class="edited-marker" title="Edited"></span>' : ''}
+      <h2>${escHtml(p.Title || 'Untitled')}</h2>
+      ${p.Vendor ? `<span class="vendor">${escHtml(p.Vendor)}</span>` : ''}
+      <span class="collection-count">${collections.length} collection${collections.length !== 1 ? 's' : ''}</span>
+      <span class="handle">${escHtml(p.Handle)}</span>
+    `;
+
+    // Body with tags
+    const bodyDiv = document.createElement('div');
+    bodyDiv.className = 'card-body';
+
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'tags';
+
+    if (collections.length === 0) {
+      tagsDiv.innerHTML = '<span class="no-collections">No collections assigned</span>';
+    } else {
+      collections.forEach(c => {
+        const title = COLLECTIONS[c] || c;
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.innerHTML = `${escHtml(c)} <span class="remove-tag" title="Remove">&times;</span>`;
+        tag.querySelector('.remove-tag').addEventListener('click', () => removeCollection(p.Handle, c));
+        tagsDiv.appendChild(tag);
+      });
+    }
+
+    // Add button with dropdown
+    const addDiv = document.createElement('div');
+    addDiv.className = 'add-collection';
+    addDiv.innerHTML = `
+      <span class="add-btn">+ Add</span>
+      <div class="dropdown">
+        <input type="text" class="dropdown-search" placeholder="Search collections..." />
+        <div class="dropdown-list"></div>
+      </div>
+    `;
+
+    const addBtn = addDiv.querySelector('.add-btn');
+    const dropdown = addDiv.querySelector('.dropdown');
+    const searchInput = addDiv.querySelector('.dropdown-search');
+    const listDiv = addDiv.querySelector('.dropdown-list');
+
+    function populateDropdown(query) {
+      listDiv.innerHTML = '';
+      const existing = new Set(getCollections(p));
+      const filtered = COLLECTION_LIST.filter(([h, t]) =>
+        !existing.has(h) &&
+        (h.includes(query.toLowerCase()) || t.toLowerCase().includes(query.toLowerCase()))
+      ).slice(0, 20);
+
+      if (filtered.length === 0) {
+        listDiv.innerHTML = '<div class="dropdown-empty">No matches</div>';
+      } else {
+        filtered.forEach(([h, t]) => {
+          const item = document.createElement('div');
+          item.className = 'dropdown-item';
+          item.innerHTML = `<span class="di-handle">${escHtml(h)}</span><span class="di-title">${escHtml(t)}</span>`;
+          item.addEventListener('click', () => {
+            addCollection(p.Handle, h);
+            dropdown.classList.remove('open');
+          });
+          listDiv.appendChild(item);
+        });
+      }
+    }
+
+    addBtn.addEventListener('click', (e) => {
+      // Close all other dropdowns first
+      document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+      dropdown.classList.toggle('open');
+      if (dropdown.classList.contains('open')) {
+        searchInput.value = '';
+        populateDropdown('');
+        setTimeout(() => searchInput.focus(), 50);
+      }
+      e.stopPropagation();
+    });
+
+    searchInput.addEventListener('input', () => populateDropdown(searchInput.value));
+    searchInput.addEventListener('click', (e) => e.stopPropagation());
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+    tagsDiv.appendChild(addDiv);
+    bodyDiv.appendChild(tagsDiv);
+    card.appendChild(titleDiv);
+    card.appendChild(bodyDiv);
+    container.appendChild(card);
+  });
+}
+
+function applyFilters() {
+  const query = document.getElementById('search').value.toLowerCase();
+  const collFilter = document.getElementById('collectionFilter').value;
+
+  let filtered = allProducts;
+  if (query) {
+    filtered = filtered.filter(p =>
+      (p.Handle || '').toLowerCase().includes(query) ||
+      (p.Title || '').toLowerCase().includes(query) ||
+      (p.Vendor || '').toLowerCase().includes(query)
+    );
+  }
+  if (collFilter === '__none') {
+    filtered = filtered.filter(p => getCollections(p).length === 0);
+  } else if (collFilter === '__edited') {
+    filtered = filtered.filter(p => editedHandles.has(p.Handle));
+  } else if (collFilter) {
+    filtered = filtered.filter(p => getCollections(p).includes(collFilter));
+  }
+
+  const total = allProducts.length;
+  const noCollections = allProducts.filter(p => getCollections(p).length === 0).length;
+  const edited = editedHandles.size;
+  const avgColl = total ? (allProducts.reduce((s, p) => s + getCollections(p).length, 0) / total).toFixed(1) : 0;
+  document.getElementById('stats').textContent =
+    `Showing ${filtered.length} of ${total} | Avg ${avgColl} collections/product | ${noCollections} uncategorized | ${edited} edited`;
+
+  renderCards(filtered);
+}
+
+function downloadCSV() {
+  let csv = 'Handle,Title,Vendor,Custom Collections\n';
+  allProducts.forEach(p => {
+    csv += `${csvEscape(p.Handle)},${csvEscape(p.Title)},${csvEscape(p.Vendor)},${csvEscape(p['Custom Collections'] || '')}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'products_categorized_reviewed.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(val) {
+  if (!val) return '';
+  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+    return '"' + val.replace(/"/g, '""') + '"';
+  }
+  return val;
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    allProducts = parseCSV(e.target.result);
+    editedHandles.clear();
+    document.getElementById('dropZone').style.display = 'none';
+    document.getElementById('controls').style.display = 'flex';
+    applyFilters();
+  };
+  reader.readAsText(file);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => {
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+});
+
+// File input
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+// Drag and drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+// Filters
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('collectionFilter').addEventListener('change', applyFilters);
+</script>
+</body>
+</html>
