@@ -47,6 +47,12 @@ Word count by complexity:
 - Simple single-flavor products: 150-175 words.
 - Complex variety packs or specialty items: 175-200 words.
 
+Audience:
+- Write for end consumers, not resellers. Our audience is buying for personal use, parties, events, and venues — not for resale.
+- Focus on direct consumption use cases (birthday parties, weddings, candy buffets, Halloween trick-or-treating, office candy jars, movie nights, etc.).
+- Avoid wholesale/reseller language like "stock your store," "retail display," "for resale," "wholesale pricing," or "merchandising."
+- Use consumer-focused language like "perfect for your party," "great value for events," "enough for the whole neighborhood," "ideal for your celebration."
+
 Avoid:
 - Marketing fluff ("delicious," "premium," "perfect," "amazing").
 - Vague modifiers ("high-quality," "best").
