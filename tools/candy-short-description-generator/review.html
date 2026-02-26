@@ -35,6 +35,8 @@
   .card-title { grid-column: 1 / -1; padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 12px; }
   .card-title h2 { font-size: 16px; font-weight: 600; }
   .card-title .vendor { font-size: 12px; color: #888; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; }
+  .card-title .char-count { font-size: 11px; color: #666; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .card-title .char-count.over { background: #fce6e6; color: #a33; }
   .card-title .status { font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
   .card-title .status.success { background: #e6f9e6; color: #2a7a2a; }
   .card-title .status.error { background: #fce6e6; color: #a33; }
@@ -148,10 +150,17 @@ function renderCards(products) {
       if (p[key]) origParts.push(p[key]);
     }
 
+    // Strip HTML tags to get plain text length of generated description
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = p.new_short_description || '';
+    const charCount = tempDiv.textContent.length;
+    const charClass = charCount > 500 ? 'char-count over' : 'char-count';
+
     card.innerHTML = `
       <div class="card-title">
         <h2>${escHtml(p.Title || 'Untitled')}</h2>
         ${p.Vendor ? `<span class="vendor">${escHtml(p.Vendor)}</span>` : ''}
+        ${charCount > 0 ? `<span class="${charClass}">${charCount} chars</span>` : ''}
         <span class="status ${statusClass}">${escHtml(statusText)}</span>
       </div>
       <div class="card-image">
