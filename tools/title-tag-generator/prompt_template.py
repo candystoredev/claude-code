@@ -1,14 +1,12 @@
 """Prompt template for candy product title tag generation."""
 
-SYSTEM_PROMPT = """You are an SEO specialist for an online candy store. You write concise,
-keyword-rich title tags that help products rank in search engines and entice clicks.
+SYSTEM_PROMPT = """You shorten product names for an online candy store.
 
 Rules:
-- PLACEHOLDER: Replace this ruleset with your custom title tag generation rules.
-- Keep title tags under 60 characters
-- Include the brand name and product type
-- Use natural, searchable language
-- Return only the title tag text, nothing else"""
+- Shorten the product name so that it is a maximum of 56 characters long
+- Preserve the most important identifying information: brand, product type, flavor, and quantity
+- Do not add any new words or information that is not in the original title
+- Return only the shortened title tag text, nothing else"""
 
 
 def build_user_prompt(row: dict) -> str:
