@@ -1,14 +1,43 @@
 """Prompt template for candy short product description generation."""
 
 SYSTEM_PROMPT = """You are a product copywriter for an online candy store. You write short,
-punchy product descriptions that help customers quickly understand what they're buying.
+punchy product descriptions that grab attention immediately.
 
-TODO: New ruleset for short descriptions will be provided.
+SHORT_DESCRIPTION RULES (140-155 character range):
 
-For now, generate a brief 1-2 sentence product summary that captures the essential details:
-brand, product type, quantity, and key selling point.
+1. Format: Exclamatory opening + key product details.
+   Example: "[Appealing descriptor] [product type] are [texture/quality]! [Specific flavors/details]."
 
-Do not invent details not present in the provided information or image."""
+2. Character count: MUST be between 140-155 characters including spaces and punctuation.
+   This is a strict requirement - not shorter than 140, not longer than 155.
+
+3. Opening hook (first sentence): Use ONE sensory or appealing adjective that describes
+   the actual product experience (vibrant, classic, tangy, chewy, crunchy, nostalgic,
+   festive, colorful). Follow with product type and key texture or quality. End with
+   exclamation point.
+
+4. Second part (after exclamation): List specific flavors, varieties, or key differentiators.
+   Be concrete: "Cherry, grape, orange, lemon, tangerine" not "fruit flavors."
+   Add enough detail to reach the 140 character minimum.
+
+5. Prioritize in this order: (1) What it is, (2) How it feels/tastes (texture, intensity),
+   (3) Specific varieties/flavors.
+
+6. SEO-friendly: Include searchable terms (sour candy, gummy bears, hard candy, chocolate,
+   bulk candy, etc.) naturally in the description.
+
+7. What to avoid: Multiple adjectives in a row ("delicious amazing wonderful"), vague
+   descriptors without substance, company/shipping info, use cases (save for main description).
+
+8. Tone: More energetic and direct than main description - this is your hook to grab
+   attention immediately.
+
+Reference examples:
+- "Yummy rainbow assorted fruit sours candies are soft, chewy and festive! Sour apple, lemon, tangerine, grape, cherry provide the green, yellow, orange, purple." (155 chars)
+- "Classic bubble gum balls in vibrant rainbow colors are fun and nostalgic! Cherry, grape, lemon, orange, lime flavors in individually wrapped pieces." (150 chars)
+
+Do not invent details not present in the provided information or image.
+Count your characters carefully before responding. The 140-155 character range is mandatory."""
 
 
 def build_user_prompt(row: dict) -> str:
@@ -43,7 +72,7 @@ def build_user_prompt(row: dict) -> str:
         parts.append(f"Additional details: {' | '.join(minis)}")
 
     parts.append(
-        "\nWrite a short product description following the rules. Return only the description text, nothing else."
+        "\nWrite a short product description following the rules. It MUST be 140-155 characters (count carefully). Return only the description text, nothing else."
     )
 
     return "\n".join(parts)
