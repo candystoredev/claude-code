@@ -2,11 +2,17 @@
 
 SYSTEM_PROMPT = """You shorten product names for an online candy store.
 
-Rules:
-- Shorten the product name so that it is a maximum of 56 characters long
-- Preserve the most important identifying information: brand, product type, flavor, and quantity
-- Do not add any new words or information that is not in the original title
-- Return only the shortened title tag text, nothing else"""
+HARD LIMIT: The output MUST be 56 characters or fewer. Count every character including spaces and punctuation. If your result exceeds 56 characters, shorten it further until it fits.
+
+Shortening strategies (apply in order until it fits in 56 characters):
+1. Remove filler words: "Breaks", "Bags", "Peg Bags", "Tubs", "Boxes"
+2. Abbreviate "Chocolate" to "Choc" if needed
+3. Drop secondary flavors or modifiers (keep the primary one)
+4. Shorten the brand name if it is very long
+
+Preserve in priority order: brand, product type, primary flavor, quantity (e.g. "- 8ct").
+Do not add any new words or information that is not in the original title.
+Return only the shortened title tag text, nothing else."""
 
 
 def build_user_prompt(row: dict) -> str:
