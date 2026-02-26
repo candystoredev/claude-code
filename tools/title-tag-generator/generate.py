@@ -81,14 +81,36 @@ def generate_title_tag(client: anthropic.Anthropic, row: dict) -> str:
 
     content.append({"type": "text", "text": user_text})
 
-    message = client.messages.create(
-        model=config.API_MODEL,
-        max_tokens=config.API_MAX_TOKENS,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
-    )
+    messages = [{"role": "user", "content": content}]
 
-    return message.content[0].text.strip()
+    max_chars = 56
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        message = client.messages.create(
+            model=config.API_MODEL,
+            max_tokens=config.API_MAX_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+        )
+
+        result = message.content[0].text.strip()
+
+        if len(result) <= max_chars:
+            return result
+
+        # Too long — ask the model to shorten further with the exact count
+        print(f"({len(result)} chars, retrying)", end=" ", flush=True)
+        messages.append({"role": "assistant", "content": result})
+        messages.append(
+            {
+                "role": "user",
+                "content": f"That is {len(result)} characters. It MUST be {max_chars} or fewer. Shorten it further.",
+            }
+        )
+
+    # After max retries, return whatever we got
+    return result
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
