@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-API_MODEL = "claude-sonnet-4-5-20250514"
-API_MAX_TOKENS = 4096
+API_MODEL = os.environ.get("API_MODEL", "claude-haiku-4-5-20251001")
+API_MAX_TOKENS = 512
 
 MAX_CLAUDE_BATCH_SIZE = int(os.environ.get("MAX_CLAUDE_BATCH_SIZE", "10"))
 MATCH_AUTO_THRESHOLD = float(os.environ.get("MATCH_AUTO_THRESHOLD", "0.85"))
