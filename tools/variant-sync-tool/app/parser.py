@@ -41,7 +41,6 @@ DISTRIBUTOR_FIELD_PATTERNS = {
         r"item[\s_-]*description",
     ],
     "flavor": [
-        r"flavor",
         r"flavou?r",
         r"variety",
         r"scent",
@@ -108,8 +107,11 @@ def read_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
     buffer = io.BytesIO(file_bytes)
     lower = filename.lower()
 
-    if lower.endswith((".xlsx", ".xls")):
+    if lower.endswith(".xlsx"):
         df = pd.read_excel(buffer, engine="openpyxl")
+    elif lower.endswith(".xls"):
+        # openpyxl doesn't support legacy .xls — let pandas pick the engine
+        df = pd.read_excel(buffer)
     elif lower.endswith(".csv"):
         buffer_text = io.StringIO(file_bytes.decode("utf-8-sig"))
         df = pd.read_csv(buffer_text)
@@ -176,20 +178,23 @@ def _build_shopify_label(row: pd.Series) -> str:
     return " / ".join(parts) if parts else "(unknown variant)"
 
 
-def auto_detect_columns(df: pd.DataFrame) -> dict:
+def auto_detect_columns(df: pd.DataFrame) -> tuple[dict[str, str], dict[str, float]]:
     """Auto-detect distributor column mappings.
 
-    Returns a dict of {field_name: detected_column_name} and a confidence dict.
+    Returns a tuple of ({field_name: detected_column_name}, {field_name: confidence}).
     """
     columns = list(df.columns)
-    mappings = {}
-    confidence = {}
+    mappings: dict[str, str] = {}
+    confidence: dict[str, float] = {}
+    claimed_columns: set[str] = set()
 
     for field, patterns in DISTRIBUTOR_FIELD_PATTERNS.items():
         best_match = None
         best_score = 0
 
         for col in columns:
+            if col in claimed_columns:
+                continue
             col_lower = str(col).strip().lower()
             for i, pattern in enumerate(patterns):
                 if re.search(pattern, col_lower, re.IGNORECASE):
@@ -202,6 +207,7 @@ def auto_detect_columns(df: pd.DataFrame) -> dict:
         if best_match:
             mappings[field] = best_match
             confidence[field] = min(1.0, best_score / len(patterns))
+            claimed_columns.add(best_match)
 
     return mappings, confidence
 

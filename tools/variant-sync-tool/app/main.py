@@ -149,17 +149,11 @@ async def upload_and_process(
             "errors": [f"Output generation failed: {e}"],
         })
 
-    # Store session results
+    # Store only the output file bytes for download — avoid holding
+    # DataFrames in memory across requests.
     session_id = str(uuid.uuid4())
     _cleanup_sessions()
-    _sessions[session_id] = {
-        "output_bytes": output_bytes,
-        "match_results": match_results,
-        "shopify_df": shopify_df,
-        "distributor_df": distributor_df,
-        "mappings": mappings,
-        "detection_status": detection_status,
-    }
+    _sessions[session_id] = {"output_bytes": output_bytes}
 
     # Build display data for results
     matched_display = []

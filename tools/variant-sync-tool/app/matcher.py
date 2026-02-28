@@ -205,7 +205,7 @@ def match_by_flavor_size(
             size = extract_size_from_title(product_name)
 
         key = (flavor, size)
-        if flavor or size:
+        if flavor and size:
             dist_lookup.setdefault(key, []).append(idx)
 
     for idx, row in shopify_df.iterrows():
@@ -231,7 +231,7 @@ def match_by_flavor_size(
             size = extract_size_from_title(row.get("title", ""))
 
         key = (flavor, size)
-        if key in dist_lookup and (flavor or size):
+        if key in dist_lookup and flavor and size:
             matches.append(MatchResult(
                 shopify_idx=idx,
                 distributor_idx=dist_lookup[key][0],
@@ -336,7 +336,7 @@ async def claude_match_batch(
 
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     except Exception as e:
         logger.error("Failed to initialize Anthropic client: %s", e)
         return _fallback_unmatched(unmatched_shopify)
@@ -365,7 +365,7 @@ async def claude_match_batch(
         prompt = _build_claude_prompt(shopify_row, batch)
 
         try:
-            response = client.messages.create(
+            response = await client.messages.create(
                 model=API_MODEL,
                 max_tokens=API_MAX_TOKENS,
                 system=SYSTEM_PROMPT,

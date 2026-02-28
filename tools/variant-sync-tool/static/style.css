@@ -177,23 +177,7 @@ input[type="text"]:focus {
     color: #1e40af;
 }
 
-/* --- Loading / HTMX indicator --- */
-.htmx-indicator {
-    display: none;
-    text-align: center;
-    padding: 2rem;
-    color: #666;
-}
-
-.htmx-request .htmx-indicator {
-    display: block;
-}
-
-.htmx-request .btn-primary {
-    opacity: 0.6;
-    pointer-events: none;
-}
-
+/* --- Loading spinner --- */
 .spinner {
     display: inline-block;
     width: 36px;
