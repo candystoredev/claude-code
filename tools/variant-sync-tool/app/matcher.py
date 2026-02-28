@@ -460,8 +460,12 @@ async def run_matching(
             claude_results = await claude_match_batch(
                 shopify_df, distributor_df, unmatched_shopify, unmatched_distributor
             )
-            # Check if all claude results are API errors
-            if all(r.reasoning.startswith("Claude API") for r in claude_results if r.match_type == "unmatched"):
+            # Check if all claude results are API errors — guard against
+            # all() returning True on an empty iterable
+            unmatched_claude = [r for r in claude_results if r.match_type == "unmatched"]
+            if unmatched_claude and all(
+                r.reasoning.startswith("Claude API") for r in unmatched_claude
+            ):
                 claude_unavailable = True
     elif unmatched_shopify:
         claude_results = _fallback_unmatched(unmatched_shopify)

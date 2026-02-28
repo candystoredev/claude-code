@@ -140,18 +140,9 @@ def parse_shopify_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
     for internal_name, matrixify_name in SHOPIFY_COLUMNS.items():
         lookup = matrixify_name.strip().lower()
         if lookup in col_map:
-            result[internal_name] = df[col_map[lookup]].astype(str).fillna("")
+            result[internal_name] = df[col_map[lookup]].fillna("").astype(str)
         else:
             result[internal_name] = ""
-
-    # Clean up "nan" strings from astype(str)
-    for col in result.columns:
-        if col == "_original_index":
-            continue
-        result[col] = result[col].replace("nan", "")
-
-    # Preserve original row data for output generation
-    result["_raw"] = df.apply(lambda row: row.to_dict(), axis=1)
 
     # Build a composite label for display
     result["_display_label"] = result.apply(_build_shopify_label, axis=1)
@@ -242,18 +233,9 @@ def parse_distributor_file(
 
     for field in DISTRIBUTOR_FIELD_PATTERNS:
         if field in mappings and mappings[field] in df.columns:
-            result[field] = df[mappings[field]].astype(str).fillna("")
+            result[field] = df[mappings[field]].fillna("").astype(str)
         else:
             result[field] = ""
-
-    # Clean "nan" strings
-    for col in result.columns:
-        if col == "_original_index":
-            continue
-        result[col] = result[col].replace("nan", "")
-
-    # Preserve original data
-    result["_raw"] = df.apply(lambda row: row.to_dict(), axis=1)
 
     # Apply manufacturer filter if provided
     if manufacturer_filter and "manufacturer" in mappings:

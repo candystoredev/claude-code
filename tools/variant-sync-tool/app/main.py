@@ -126,7 +126,6 @@ async def upload_and_process(
                 "flavor, size, SKU, UPC, and price."
             ],
             "detection_status": detection_status,
-            "distributor_columns": list(confidence.keys()),
         })
 
     # Run matching
