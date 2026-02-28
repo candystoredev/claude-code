@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Files — Variant Sync Tool{% endblock %}
+
+{% block content %}
+<section class="upload-section">
+    <h2>Upload Files</h2>
+    <p>Upload your Shopify export (Matrixify format) and distributor offerings file to begin syncing.</p>
+
+    {% if errors is defined and errors %}
+    <div class="alert alert-error">
+        <strong>Error:</strong>
+        <ul>
+            {% for error in errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if detection_status is defined and detection_status %}
+    <div class="alert alert-warning">
+        <strong>Column Detection Results:</strong>
+        <ul>
+            {% if detection_status.detected %}
+            <li>Detected: {{ detection_status.detected | join(', ') }}</li>
+            {% endif %}
+            {% if detection_status.missing %}
+            <li>Missing: {{ detection_status.missing | join(', ') }}</li>
+            {% endif %}
+            {% if detection_status.needs_review %}
+            <li>Low confidence: {{ detection_status.needs_review | join(', ') }}</li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <form action="/upload" method="post" enctype="multipart/form-data"
+          hx-post="/upload" hx-target="#results-area" hx-swap="innerHTML"
+          hx-indicator="#loading">
+
+        <div class="form-group">
+            <label for="shopify_file">Shopify Export (Matrixify format)</label>
+            <p class="form-help">Excel (.xlsx) or CSV file exported from Shopify via Matrixify</p>
+            <input type="file" id="shopify_file" name="shopify_file"
+                   accept=".xlsx,.xls,.csv" required>
+        </div>
+
+        <div class="form-group">
+            <label for="distributor_file">Distributor Offerings List</label>
+            <p class="form-help">Excel (.xlsx) or CSV file from your distributor/manufacturer</p>
+            <input type="file" id="distributor_file" name="distributor_file"
+                   accept=".xlsx,.xls,.csv" required>
+        </div>
+
+        <div class="form-group">
+            <label for="manufacturer_filter">Manufacturer Filter (optional)</label>
+            <p class="form-help">Enter a manufacturer/brand name to filter the distributor list</p>
+            <input type="text" id="manufacturer_filter" name="manufacturer_filter"
+                   placeholder="e.g. Optimum Nutrition">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Run Sync</button>
+    </form>
+
+    <div id="loading" class="htmx-indicator">
+        <div class="spinner"></div>
+        <p>Processing files and running matching... This may take a moment if Claude AI is used for fuzzy matching.</p>
+    </div>
+</section>
+
+<div id="results-area"></div>
+{% endblock %}
