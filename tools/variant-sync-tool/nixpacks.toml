@@ -1,0 +1,14 @@
+providers = []
+
+[phases.setup]
+nixPkgs = ["python312", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m ensurepip --upgrade",
+  "python -m pip install --no-cache-dir -r requirements.txt",
+  "curl -sLf --retry 3 --tlsv1.2 --proto '=https' 'https://cli.doppler.com/install.sh' | sh"
+]
+
+[start]
+cmd = "doppler run -- gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"

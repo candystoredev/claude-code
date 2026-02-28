@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Results — Variant Sync Tool{% endblock %}
+
+{% block content %}
+<section class="results-section">
+    <div class="results-header">
+        <h2>Sync Results</h2>
+        <a href="/download/{{ session_id }}" class="btn btn-primary">Download Matrixify File</a>
+    </div>
+
+    {% if claude_unavailable %}
+    <div class="alert alert-warning">
+        <strong>Warning:</strong> Claude AI was unavailable for fuzzy matching.
+        All unresolved matches have been flagged for manual review.
+        Check your ANTHROPIC_API_KEY configuration.
+    </div>
+    {% endif %}
+
+    <div class="summary-cards">
+        <div class="card card-matched">
+            <div class="card-number">{{ counts.matched }}</div>
+            <div class="card-label">Matched</div>
+        </div>
+        <div class="card card-delete">
+            <div class="card-number">{{ counts.to_delete }}</div>
+            <div class="card-label">To Delete</div>
+        </div>
+        <div class="card card-add">
+            <div class="card-number">{{ counts.to_add }}</div>
+            <div class="card-label">To Add</div>
+        </div>
+        <div class="card card-review">
+            <div class="card-number">{{ counts.needs_review }}</div>
+            <div class="card-label">Needs Review</div>
+        </div>
+    </div>
+
+    <p class="totals">
+        Shopify variants: {{ counts.shopify_total }} |
+        Distributor products: {{ counts.distributor_total }}
+    </p>
+
+    {% if detection_status is defined and detection_status %}
+    <details class="section-details">
+        <summary>Column Mapping</summary>
+        <div class="details-content">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Mapped To</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for field, column in mappings.items() %}
+                    <tr>
+                        <td>{{ field }}</td>
+                        <td>{{ column }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if matched %}
+    <details class="section-details" open>
+        <summary>Matched Variants ({{ counts.matched }})</summary>
+        <div class="details-content">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Shopify Variant</th>
+                        <th>Distributor Product</th>
+                        <th>Match Type</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in matched %}
+                    <tr>
+                        <td>{{ m.shopify_label }}</td>
+                        <td>{{ m.distributor_label }}</td>
+                        <td><span class="badge badge-{{ m.match_type }}">{{ m.match_type }}</span></td>
+                        <td>{{ "%.0f"|format(m.confidence * 100) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if to_delete %}
+    <details class="section-details" open>
+        <summary>Variants to Delete ({{ counts.to_delete }})</summary>
+        <div class="details-content">
+            <p class="section-note">These Shopify variants were not found in the distributor list and will be marked for deletion.</p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Variant</th>
+                        <th>SKU</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in to_delete %}
+                    <tr>
+                        <td>{{ d.label }}</td>
+                        <td>{{ d.sku }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if to_add %}
+    <details class="section-details" open>
+        <summary>Variants to Add ({{ counts.to_add }})</summary>
+        <div class="details-content">
+            <p class="section-note">These distributor products were not found in Shopify and will be marked as NEW (or MERGE if the parent product exists).</p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>SKU</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in to_add %}
+                    <tr>
+                        <td>{{ a.label }}</td>
+                        <td>{{ a.sku }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if needs_review %}
+    <details class="section-details" open>
+        <summary>Needs Review ({{ counts.needs_review }})</summary>
+        <div class="details-content">
+            <p class="section-note">These matches have low confidence and need manual verification. Claude's reasoning is shown below.</p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Shopify Variant</th>
+                        <th>Distributor Product</th>
+                        <th>Confidence</th>
+                        <th>Reasoning</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in needs_review %}
+                    <tr>
+                        <td>{{ r.shopify_label }}</td>
+                        <td>{{ r.distributor_label }}</td>
+                        <td>{{ "%.0f"|format(r.confidence * 100) }}%</td>
+                        <td class="reasoning-cell">{{ r.reasoning }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
+    <div class="actions-footer">
+        <a href="/" class="btn btn-secondary">Run Another Sync</a>
+        <a href="/download/{{ session_id }}" class="btn btn-primary">Download Matrixify File</a>
+    </div>
+</section>
+{% endblock %}
