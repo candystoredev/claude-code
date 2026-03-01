@@ -1,13 +1,18 @@
 """Matching logic for syncing Shopify variants with distributor products.
 
 Two-pass approach:
-  Pass 1 — Deterministic matching on SKU, barcode, or normalized flavor+size.
+  Pass 1 — Deterministic matching: option-value-in-name, SKU, barcode.
   Pass 2 — Claude API fallback for unresolved records.
+
+Matching is scoped per Shopify product (handle group).  Before matching,
+distributor rows are filtered to only those whose unit size (parsed from
+price_inner / price_case columns) matches the Shopify product's title size.
 """
 
 import json
 import logging
 import re
+import unicodedata
 
 import pandas as pd
 
@@ -57,9 +62,15 @@ FILLER_WORDS = {
 }
 
 
+def strip_accents(text: str) -> str:
+    """Remove accent marks from characters (e.g. 'ñ' -> 'n')."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 def normalize_text(text: str) -> str:
-    """Lowercase, strip punctuation, collapse whitespace."""
-    text = str(text).lower().strip()
+    """Lowercase, strip accents, strip punctuation, collapse whitespace."""
+    text = strip_accents(str(text)).lower().strip()
     text = re.sub(r"[^\w\s.]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -82,7 +93,10 @@ def strip_filler(text: str) -> str:
 
 
 def extract_size_from_title(title: str) -> str:
-    """Extract size/weight pattern from a product title string."""
+    """Extract size/weight pattern from a product title string.
+
+    Returns a normalized size like '10lb' or '' if none found.
+    """
     title = str(title).lower()
     match = re.search(
         r"(\d+\.?\d*)\s*"
@@ -92,19 +106,115 @@ def extract_size_from_title(title: str) -> str:
         title,
     )
     if match:
-        return normalize_units(match.group(0))
+        return normalize_size_value(normalize_units(match.group(0)))
+    return ""
+
+
+def normalize_size_value(size_str: str) -> str:
+    """Normalize a size string so '10.00lb' and '10lb' compare equal.
+
+    Strips trailing decimal zeros from the numeric portion.
+    """
+    size_str = normalize_units(size_str)
+    m = re.match(r"(\d+\.?\d*)(.*)", size_str)
+    if m:
+        try:
+            num = float(m.group(1))
+            num_str = str(int(num)) if num == int(num) else f"{num:g}"
+            return f"{num_str}{m.group(2)}"
+        except ValueError:
+            pass
+    return size_str
+
+
+def parse_size_from_price_field(price_text: str) -> str:
+    """Extract unit size from a distributor price field.
+
+    Handles formats like '5.00lb @ $25.47/bag' or '10.00lb @ $50.00/case'.
+    Returns a normalized size like '5lb' or '' if none found.
+    """
+    text = str(price_text).lower().strip()
+    match = re.match(
+        r"(\d+\.?\d*)\s*"
+        r"(lb|lbs|pound|pounds|oz|ounce|ounces|g|gram|grams|"
+        r"kg|kilogram|kilograms|ml|milliliter|l|liter|"
+        r"fl\s*oz|ct|count|pc|piece|pk|pack)\b",
+        text,
+    )
+    if match:
+        return normalize_size_value(normalize_units(match.group(0)))
     return ""
 
 
 def normalize_sku(sku: str) -> str:
-    """Normalize a SKU for comparison."""
-    return re.sub(r"[^a-z0-9]", "", str(sku).lower().strip())
+    """Normalize a SKU for comparison.
+
+    Strips the common ND-style prefix (ND-, NDD-, NDDD-, etc.) that
+    appears on Shopify SKUs but not on distributor SKUs (or vice versa).
+    """
+    text = str(sku).lower().strip()
+    # Strip ND+ prefix (e.g. 'ND-12345' -> '12345')
+    text = re.sub(r"^n+d+-", "", text)
+    return re.sub(r"[^a-z0-9]", "", text)
 
 
 def normalize_barcode(barcode: str) -> str:
     """Normalize a barcode/UPC — strip non-digits, remove leading zeros."""
     digits = re.sub(r"[^0-9]", "", str(barcode).strip())
     return digits.lstrip("0") if digits else ""
+
+
+# --- Size filtering ---
+
+def get_distributor_sizes(row: pd.Series) -> set[str]:
+    """Get all unit sizes a distributor product is offered in.
+
+    Parses sizes from price_inner, price_case, size, and product_name.
+    """
+    sizes: set[str] = set()
+
+    for field in ("price_inner", "price_case"):
+        s = parse_size_from_price_field(row.get(field, ""))
+        if s:
+            sizes.add(s)
+
+    # Fallback: explicit size column
+    size_val = normalize_units(str(row.get("size", "")).strip())
+    if size_val:
+        s = normalize_size_value(size_val)
+        if s:
+            sizes.add(s)
+
+    # Fallback: extract from product name
+    name_size = extract_size_from_title(row.get("product_name", ""))
+    if name_size:
+        sizes.add(name_size)
+
+    return sizes
+
+
+def filter_distributor_by_size(
+    distributor_df: pd.DataFrame,
+    target_size: str,
+    exclude: set[int] | None = None,
+) -> pd.DataFrame:
+    """Filter distributor rows to those matching the target unit size.
+
+    If target_size is empty, returns all rows (minus excluded indices).
+    """
+    if exclude is None:
+        exclude = set()
+
+    mask = ~distributor_df.index.isin(exclude)
+
+    if not target_size:
+        return distributor_df[mask]
+
+    def row_matches_size(row: pd.Series) -> bool:
+        return target_size in get_distributor_sizes(row)
+
+    size_mask = distributor_df.apply(row_matches_size, axis=1)
+    return distributor_df[mask & size_mask]
 
 
 # --- Match result data structure ---
@@ -122,7 +232,7 @@ class MatchResult:
     ):
         self.shopify_idx = shopify_idx
         self.distributor_idx = distributor_idx
-        self.match_type = match_type  # "sku", "barcode", "flavor_size", "claude", "unmatched"
+        self.match_type = match_type
         self.confidence = confidence
         self.reasoning = reasoning
 
@@ -138,11 +248,85 @@ class MatchResult:
 
 # --- Pass 1: Deterministic matching ---
 
-def match_by_sku(shopify_df: pd.DataFrame, distributor_df: pd.DataFrame) -> list[MatchResult]:
-    """Match variants by exact SKU."""
+def _option_matches_name(option_value: str, distributor_name: str) -> bool:
+    """Check if a Shopify option value matches a distributor product name.
+
+    Handles accent differences (Piña ↔ Pina) and compound words
+    (Passionfruit ↔ Passion Fruit) by trying both substring matching
+    and space-collapsed matching.
+    """
+    opt = normalize_text(option_value)
+    name = normalize_text(distributor_name)
+
+    if not opt or not name:
+        return False
+
+    # Direct substring match
+    if opt in name:
+        return True
+
+    # Space-collapsed match (handles "Passion Fruit" vs "Passionfruit")
+    opt_collapsed = opt.replace(" ", "")
+    name_collapsed = name.replace(" ", "")
+    if opt_collapsed in name_collapsed:
+        return True
+
+    return False
+
+
+def match_by_option_in_name(
+    shopify_df: pd.DataFrame,
+    distributor_df: pd.DataFrame,
+) -> list[MatchResult]:
+    """Match by checking if Shopify option value appears in distributor name.
+
+    This is the primary matching strategy for flavor/color variants.
+    For example, Shopify Option1 Value = "Bubble Gum" matches distributor
+    Name = "JELLY BELLY BUBBLE GUM JELLY BEANS".
+    """
     matches = []
 
-    dist_skus = {}
+    for s_idx, s_row in shopify_df.iterrows():
+        # Get option1_value (the flavor/color)
+        option_val = str(s_row.get("option1_value", "")).strip()
+        if not option_val or option_val.lower() in ("default title", ""):
+            continue
+
+        best_match_idx = None
+        best_score = 0.0
+
+        for d_idx, d_row in distributor_df.iterrows():
+            name = str(d_row.get("product_name", "")).strip()
+            if not name:
+                continue
+
+            if _option_matches_name(option_val, name):
+                # Score by specificity: longer option match relative to name
+                # is a stronger signal
+                opt_len = len(normalize_text(option_val).replace(" ", ""))
+                name_len = len(normalize_text(name).replace(" ", ""))
+                score = opt_len / name_len if name_len else 0.0
+                if score > best_score:
+                    best_score = score
+                    best_match_idx = d_idx
+
+        if best_match_idx is not None:
+            matches.append(MatchResult(
+                shopify_idx=s_idx,
+                distributor_idx=best_match_idx,
+                match_type="name",
+                confidence=0.95,
+                reasoning=f"Option '{option_val}' found in distributor name",
+            ))
+
+    return matches
+
+
+def match_by_sku(shopify_df: pd.DataFrame, distributor_df: pd.DataFrame) -> list[MatchResult]:
+    """Match variants by normalized SKU (with ND-prefix stripping)."""
+    matches = []
+
+    dist_skus: dict[str, int] = {}
     for idx, row in distributor_df.iterrows():
         sku = normalize_sku(row.get("sku", ""))
         if sku:
@@ -166,7 +350,7 @@ def match_by_barcode(shopify_df: pd.DataFrame, distributor_df: pd.DataFrame) -> 
     """Match variants by barcode/UPC."""
     matches = []
 
-    dist_barcodes = {}
+    dist_barcodes: dict[str, int] = {}
     for idx, row in distributor_df.iterrows():
         barcode = normalize_barcode(row.get("upc", ""))
         if barcode:
@@ -186,68 +370,16 @@ def match_by_barcode(shopify_df: pd.DataFrame, distributor_df: pd.DataFrame) -> 
     return matches
 
 
-def match_by_flavor_size(
-    shopify_df: pd.DataFrame,
-    distributor_df: pd.DataFrame,
-) -> list[MatchResult]:
-    """Match by normalized flavor + size."""
-    matches = []
-
-    # Build distributor lookup keyed on (normalized_flavor, normalized_size)
-    dist_lookup: dict[tuple[str, str], list[int]] = {}
-    for idx, row in distributor_df.iterrows():
-        flavor = strip_filler(normalize_units(row.get("flavor", "")))
-        size = normalize_units(row.get("size", ""))
-        product_name = normalize_units(row.get("product_name", ""))
-
-        # Also try extracting size from product name if size field is empty
-        if not size:
-            size = extract_size_from_title(product_name)
-
-        key = (flavor, size)
-        if flavor and size:
-            dist_lookup.setdefault(key, []).append(idx)
-
-    for idx, row in shopify_df.iterrows():
-        # Extract flavor from option values
-        flavor = ""
-        for opt in ["option1_value", "option2_value", "option3_value"]:
-            val = str(row.get(opt, "")).strip()
-            if val and val.lower() not in ("default title", ""):
-                # Heuristic: if it looks like a size, skip it
-                if not re.match(r"^\d+\.?\d*\s*(lb|oz|g|kg|ml|l|ct|pc|pk)", val.lower()):
-                    flavor = strip_filler(normalize_units(val))
-                    break
-
-        # Extract size — check option values and title
-        size = ""
-        for opt in ["option1_value", "option2_value", "option3_value"]:
-            val = str(row.get(opt, "")).strip()
-            if re.match(r"^\d+\.?\d*\s*(lb|oz|g|kg|ml|l|ct|pc|pk)", val.lower()):
-                size = normalize_units(val)
-                break
-
-        if not size:
-            size = extract_size_from_title(row.get("title", ""))
-
-        key = (flavor, size)
-        if key in dist_lookup and flavor and size:
-            matches.append(MatchResult(
-                shopify_idx=idx,
-                distributor_idx=dist_lookup[key][0],
-                match_type="flavor_size",
-                confidence=0.9,
-                reasoning=f"Flavor+size match: flavor='{flavor}', size='{size}'",
-            ))
-
-    return matches
-
-
 def deterministic_match(
     shopify_df: pd.DataFrame,
     distributor_df: pd.DataFrame,
 ) -> tuple[list[MatchResult], set[int], set[int]]:
     """Run all deterministic matching passes.
+
+    Priority order:
+      1. Option value in distributor name (primary for flavor/color)
+      2. SKU match (supporting — distributors change SKUs frequently)
+      3. Barcode match (only fires if UPC columns are available)
 
     Returns:
         Tuple of (matches, unmatched_shopify_indices, unmatched_distributor_indices).
@@ -256,8 +388,7 @@ def deterministic_match(
     matched_distributor: set[int] = set()
     all_matches: list[MatchResult] = []
 
-    # Run matching passes in priority order
-    for match_fn in [match_by_sku, match_by_barcode, match_by_flavor_size]:
+    for match_fn in [match_by_option_in_name, match_by_sku, match_by_barcode]:
         results = match_fn(shopify_df, distributor_df)
         for result in results:
             if result.shopify_idx not in matched_shopify and result.distributor_idx not in matched_distributor:
@@ -273,9 +404,14 @@ def deterministic_match(
 
 # --- Pass 2: Claude API fallback ---
 
-SYSTEM_PROMPT = """You are a product matching assistant for a supplement/candy/consumer goods distributor.
+SYSTEM_PROMPT = """You are a product matching assistant for a candy/supplement/consumer goods distributor.
 
-Given a Shopify variant record and a list of candidate distributor products, identify the best match based on flavor, size, and product name.
+Given a Shopify variant record and a list of candidate distributor products, identify the best match based on flavor/color name.
+
+The Shopify variant has an option value (typically a flavor or color like "Bubble Gum" or "Very Cherry").
+The distributor products have names that embed the flavor/color (like "JELLY BELLY BUBBLE GUM JELLY BEANS").
+
+Your job: find the distributor product whose name best matches the Shopify variant's flavor/color option.
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -285,9 +421,11 @@ Return ONLY valid JSON with this exact structure:
 }
 
 Rules:
-- Match based on product name similarity, flavor/variety, and size/weight
-- The same product may use different naming conventions (e.g. "Choc Peanut Butter" vs "Chocolate PB")
-- Size representations may differ (e.g. "2.5lb" vs "2.5 Pound" vs "40oz")
+- Focus on matching the flavor/color/variety — the option value should appear (possibly abbreviated or respelled) in the distributor product name
+- Handle different naming conventions: "Choc PB" = "Chocolate Peanut Butter", "Straw" = "Strawberry"
+- Handle accent differences: "Piña Colada" = "Pina Colada"
+- Handle compound words: "Passionfruit" = "Passion Fruit"
+- SKU can be a supporting clue but is NOT reliable on its own (distributors change SKUs)
 - If no candidate is a reasonable match, return match_index: null with low confidence
 - Be conservative — only return high confidence (>0.85) for clear matches"""
 
@@ -299,7 +437,6 @@ def _build_claude_prompt(shopify_row: pd.Series, candidates: pd.DataFrame) -> st
         "option1": str(shopify_row.get("option1_value", "")),
         "option2": str(shopify_row.get("option2_value", "")),
         "sku": str(shopify_row.get("variant_sku", "")),
-        "price": str(shopify_row.get("variant_price", "")),
     }
 
     candidate_list = []
@@ -307,10 +444,7 @@ def _build_claude_prompt(shopify_row: pd.Series, candidates: pd.DataFrame) -> st
         candidate_list.append({
             "index": i,
             "product_name": str(row.get("product_name", "")),
-            "flavor": str(row.get("flavor", "")),
-            "size": str(row.get("size", "")),
             "sku": str(row.get("sku", "")),
-            "price": str(row.get("price", "")),
         })
 
     return (
@@ -325,11 +459,7 @@ async def claude_match_batch(
     unmatched_shopify: set[int],
     unmatched_distributor: set[int],
 ) -> list[MatchResult]:
-    """Use Claude API to match remaining unresolved records.
-
-    Batches unmatched Shopify variants and sends each with up to
-    MAX_CLAUDE_BATCH_SIZE candidate distributor products.
-    """
+    """Use Claude API to match remaining unresolved records."""
     if not ANTHROPIC_API_KEY:
         logger.warning("No ANTHROPIC_API_KEY set — skipping Claude matching")
         return _fallback_unmatched(unmatched_shopify)
@@ -348,7 +478,6 @@ async def claude_match_batch(
     for shopify_idx in unmatched_shopify:
         shopify_row = shopify_df.loc[shopify_idx]
 
-        # Get unmatched distributor candidates (limit to batch size)
         available = distributor_candidates[
             ~distributor_candidates.index.isin(matched_distributor_indices)
         ]
@@ -373,7 +502,6 @@ async def claude_match_batch(
             )
 
             response_text = response.content[0].text.strip()
-            # Extract JSON from response (handle markdown code blocks)
             json_match = re.search(r"\{[^{}]*\}", response_text, re.DOTALL)
             if json_match:
                 parsed = json.loads(json_match.group())
@@ -434,74 +562,93 @@ async def run_matching(
     shopify_df: pd.DataFrame,
     distributor_df: pd.DataFrame,
 ) -> dict:
-    """Run the full two-pass matching pipeline.
+    """Run the full matching pipeline, scoped per Shopify product (handle).
+
+    For each Shopify product handle:
+      1. Extract the unit size from the product title.
+      2. Filter distributor rows to those offered in that unit size.
+      3. Run deterministic matching (option-in-name, SKU, barcode).
+      4. Run Claude fallback for any remaining unmatched variants.
 
     Returns a dict with categorized results:
-      - matched: high-confidence matches (deterministic + claude auto)
+      - matched: high-confidence matches
       - to_delete: Shopify variants with no distributor match
       - to_add: distributor products with no Shopify match
-      - needs_review: low-confidence Claude matches for manual review
+      - needs_review: low-confidence Claude matches
       - claude_unavailable: True if Claude API was not available
     """
-    # Pass 1: Deterministic
-    det_matches, unmatched_shopify, unmatched_distributor = deterministic_match(
-        shopify_df, distributor_df
-    )
-
-    # Pass 2: Claude fallback
+    all_matched: list[MatchResult] = []
+    all_to_delete: set[int] = set()
+    all_needs_review: list[MatchResult] = []
+    global_matched_distributor: set[int] = set()
     claude_unavailable = False
-    claude_results = []
 
-    if unmatched_shopify and unmatched_distributor:
-        if not ANTHROPIC_API_KEY:
-            claude_unavailable = True
-            claude_results = _fallback_unmatched(unmatched_shopify)
-        else:
-            claude_results = await claude_match_batch(
-                shopify_df, distributor_df, unmatched_shopify, unmatched_distributor
-            )
-            # Check if all claude results are API errors — guard against
-            # all() returning True on an empty iterable
-            unmatched_claude = [r for r in claude_results if r.match_type == "unmatched"]
-            if unmatched_claude and all(
-                r.reasoning.startswith("Claude API") for r in unmatched_claude
-            ):
+    # Group Shopify variants by handle (each handle = one product)
+    handles = shopify_df.groupby("handle", sort=False)
+
+    for handle, group in handles:
+        # Extract unit size from the product title (same for all rows in group)
+        title = str(group.iloc[0]["title"])
+        target_size = extract_size_from_title(title)
+
+        # Filter distributor rows to matching unit size
+        filtered_dist = filter_distributor_by_size(
+            distributor_df, target_size, exclude=global_matched_distributor
+        )
+
+        if filtered_dist.empty:
+            # No distributor products match this size — all variants are deletions
+            all_to_delete.update(group.index.tolist())
+            continue
+
+        # Pass 1: Deterministic matching within this handle group
+        det_matches, unmatched_shopify, unmatched_dist = deterministic_match(
+            group, filtered_dist
+        )
+
+        for m in det_matches:
+            all_matched.append(m)
+            if m.distributor_idx is not None:
+                global_matched_distributor.add(m.distributor_idx)
+
+        # Pass 2: Claude fallback for unmatched variants in this group
+        if unmatched_shopify and unmatched_dist:
+            if not ANTHROPIC_API_KEY:
                 claude_unavailable = True
-    elif unmatched_shopify:
-        claude_results = _fallback_unmatched(unmatched_shopify)
+                claude_results = _fallback_unmatched(unmatched_shopify)
+            else:
+                claude_results = await claude_match_batch(
+                    group, filtered_dist, unmatched_shopify, unmatched_dist
+                )
+                unmatched_claude = [r for r in claude_results if r.match_type == "unmatched"]
+                if unmatched_claude and all(
+                    r.reasoning.startswith("Claude API") for r in unmatched_claude
+                ):
+                    claude_unavailable = True
 
-    # Categorize results
-    matched = []
-    needs_review = []
-    to_delete_indices = set()
+            for r in claude_results:
+                if r.match_type == "claude" and r.confidence >= MATCH_AUTO_THRESHOLD:
+                    all_matched.append(r)
+                    if r.distributor_idx is not None:
+                        global_matched_distributor.add(r.distributor_idx)
+                elif r.match_type == "claude" and r.confidence >= MATCH_REVIEW_THRESHOLD:
+                    all_needs_review.append(r)
+                    if r.distributor_idx is not None:
+                        global_matched_distributor.add(r.distributor_idx)
+                else:
+                    all_to_delete.add(r.shopify_idx)
+        elif unmatched_shopify:
+            all_to_delete.update(unmatched_shopify)
 
-    # All deterministic matches are high confidence
-    for m in det_matches:
-        matched.append(m)
-
-    # Categorize Claude results
-    matched_dist_from_claude: set[int] = set()
-    for r in claude_results:
-        if r.match_type == "claude" and r.confidence >= MATCH_AUTO_THRESHOLD:
-            matched.append(r)
-            if r.distributor_idx is not None:
-                matched_dist_from_claude.add(r.distributor_idx)
-        elif r.match_type == "claude" and r.confidence >= MATCH_REVIEW_THRESHOLD:
-            needs_review.append(r)
-            if r.distributor_idx is not None:
-                matched_dist_from_claude.add(r.distributor_idx)
-        else:
-            to_delete_indices.add(r.shopify_idx)
-
-    # Distributor products not matched at all = to_add
-    all_matched_dist = {m.distributor_idx for m in matched if m.distributor_idx is not None}
-    all_matched_dist |= matched_dist_from_claude
-    to_add_indices = unmatched_distributor - all_matched_dist
+    # Distributor products not matched to any Shopify variant
+    all_matched_dist = {m.distributor_idx for m in all_matched if m.distributor_idx is not None}
+    all_matched_dist |= global_matched_distributor
+    to_add_indices = set(distributor_df.index) - all_matched_dist
 
     return {
-        "matched": [m.to_dict() for m in matched],
-        "to_delete": list(to_delete_indices),
+        "matched": [m.to_dict() for m in all_matched],
+        "to_delete": list(all_to_delete),
         "to_add": list(to_add_indices),
-        "needs_review": [r.to_dict() for r in needs_review],
+        "needs_review": [r.to_dict() for r in all_needs_review],
         "claude_unavailable": claude_unavailable,
     }
