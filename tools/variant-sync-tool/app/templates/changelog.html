@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Changelog &mdash; Variant Sync Tool{% endblock %}
+
+{% block content %}
+<section class="changelog-section">
+    <h2>Changelog</h2>
+
+    <div class="changelog-entry">
+        <div class="changelog-date">March 2026</div>
+        <h3>How-to guide, navigation, and sample downloads</h3>
+        <ul>
+            <li><span class="changelog-tag tag-feature">Feature</span> Added "How to Use" page with step-by-step guide, matching logic explanation, and tech stack overview</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Added navigation bar across all pages</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Added this changelog page to track tool updates</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Added sample file downloads so users can see expected Shopify and distributor file formats</li>
+        </ul>
+    </div>
+
+    <div class="changelog-entry">
+        <div class="changelog-date">February 2026</div>
+        <h3>Matching accuracy improvements</h3>
+        <ul>
+            <li><span class="changelog-tag tag-improvement">Improvement</span> Filter to_add suggestions by product-name relevance, not just unit size &mdash; prevents unrelated products from being suggested</li>
+            <li><span class="changelog-tag tag-fix">Fix</span> Fixed matching priority and collision resolution to work correctly with real-world data</li>
+            <li><span class="changelog-tag tag-fix">Fix</span> Fixed matching accuracy: scoped to_add by unit size and added SKU safety net for deletions</li>
+            <li><span class="changelog-tag tag-improvement">Improvement</span> Overhauled variant matching: flavor-in-name matching, unit size filtering, ND-prefix SKU stripping</li>
+        </ul>
+    </div>
+
+    <div class="changelog-entry">
+        <div class="changelog-date">February 2026</div>
+        <h3>Bug fixes and model optimization</h3>
+        <ul>
+            <li><span class="changelog-tag tag-improvement">Improvement</span> Switched default AI model to Claude Haiku for faster, cheaper matching</li>
+            <li><span class="changelog-tag tag-fix">Fix</span> Fixed NaN handling, Claude unavailability false positives, and removed dead code</li>
+            <li><span class="changelog-tag tag-fix">Fix</span> Various bug fixes and refinements to the sync pipeline</li>
+        </ul>
+    </div>
+
+    <div class="changelog-entry">
+        <div class="changelog-date">February 2026</div>
+        <h3>Initial release</h3>
+        <ul>
+            <li><span class="changelog-tag tag-feature">Feature</span> Variant Sync Tool launched &mdash; upload Shopify + distributor files, get Matrixify-ready output</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Multi-pass matching: SKU, barcode, option-in-name, and Claude AI fallback</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Auto-detection of distributor file column mappings</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Matrixify-compatible Excel output with DELETE, NEW, MERGE, and REVIEW commands</li>
+            <li><span class="changelog-tag tag-feature">Feature</span> Deployed on Railway with Doppler secrets management</li>
+        </ul>
+    </div>
+
+    <div class="actions-footer">
+        <a href="/" class="btn btn-primary">Start a Sync</a>
+    </div>
+</section>
+{% endblock %}

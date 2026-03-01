@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}How to Use &mdash; Variant Sync Tool{% endblock %}
+
+{% block content %}
+<section class="guide-section">
+
+    <h2>How to Use</h2>
+    <p class="guide-intro">This tool syncs your Shopify product variants with a distributor/manufacturer product list.
+        Upload both files, and it generates a Matrixify-ready Excel file you can import directly into Shopify.</p>
+
+    <div class="steps">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h3>Export from Shopify</h3>
+                <p>Use the <strong>Matrixify</strong> app to export your products from Shopify as an Excel file.
+                    The export should include columns like <code>Handle</code>, <code>Title</code>,
+                    <code>Option1 Value</code>, <code>Variant SKU</code>, and <code>Variant Barcode</code>.</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h3>Get your distributor file</h3>
+                <p>This is the product offerings spreadsheet from your distributor or manufacturer. The tool
+                    auto-detects columns like <code>Product Name</code>, <code>SKU</code>, <code>Price</code>,
+                    <code>Flavor</code>, and <code>Size</code> &mdash; no reformatting needed.</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h3>Upload &amp; run sync</h3>
+                <p>Upload both files on the <a href="/">home page</a>. Optionally filter by manufacturer name
+                    if your distributor file has multiple brands. Click <strong>Run Sync</strong>.</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <h3>Review results</h3>
+                <p>The results page shows four categories:</p>
+                <ul>
+                    <li><strong>Matched</strong> &mdash; Shopify variants that matched a distributor product (no action needed)</li>
+                    <li><strong>To Delete</strong> &mdash; Shopify variants not found in the distributor list (discontinued or removed)</li>
+                    <li><strong>To Add</strong> &mdash; Distributor products not in Shopify yet (new products to list)</li>
+                    <li><strong>Needs Review</strong> &mdash; Low-confidence matches that need your manual verification</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+                <h3>Download &amp; import</h3>
+                <p>Download the generated Excel file. Each row has a <code>Command</code> column:</p>
+                <div class="command-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Command</th><th>Meaning</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>(blank)</code></td><td>Matched variant &mdash; informational, no action</td></tr>
+                            <tr><td><code>DELETE</code></td><td>Remove this variant from Shopify</td></tr>
+                            <tr><td><code>NEW</code></td><td>Create a new product in Shopify</td></tr>
+                            <tr><td><code>MERGE</code></td><td>Add as a new variant to an existing product</td></tr>
+                            <tr><td><code>REVIEW</code></td><td>Low-confidence match &mdash; verify before importing</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p>Review the <code>DELETE</code> and <code>REVIEW</code> rows, then import via Matrixify.</p>
+            </div>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <h2>How Matching Works</h2>
+    <p class="guide-intro">The tool uses a multi-pass matching strategy to pair Shopify variants with distributor products.</p>
+
+    <div class="match-passes">
+        <div class="match-pass">
+            <h3>Pass 1: Deterministic matching</h3>
+            <p>Fast, rule-based matching that runs without any AI calls:</p>
+            <ol>
+                <li><strong>SKU match</strong> &mdash; Normalized SKU comparison (strips ND-prefixes, ignores case/punctuation). Highest confidence.</li>
+                <li><strong>Barcode/UPC match</strong> &mdash; Strips leading zeros and non-digit characters, then compares.</li>
+                <li><strong>Option-in-name match</strong> &mdash; Checks if the Shopify option value (e.g. "Bubble Gum") appears in the distributor product name. Handles accents, compound words, and uses specificity-based conflict resolution.</li>
+            </ol>
+        </div>
+
+        <div class="match-pass">
+            <h3>Pass 2: Claude AI fallback</h3>
+            <p>Any variants unmatched after Pass 1 are sent to Claude (Haiku) for fuzzy matching.
+                Claude evaluates flavor/variety name similarity with context awareness &mdash; it handles abbreviations
+                ("Choc PB" = "Chocolate Peanut Butter"), alternate spellings, and naming conventions.</p>
+            <p>Matches above 85% confidence are auto-accepted. Matches between 50-85% are flagged for review.
+                Below 50% are treated as unmatched.</p>
+        </div>
+
+        <div class="match-pass">
+            <h3>Size scoping</h3>
+            <p>Before matching, variants are scoped by product handle (each Shopify product matches independently).
+                Distributor rows are filtered by unit size extracted from the product title and price fields
+                (e.g. "5lb", "10oz"), so a 5lb product only matches against 5lb distributor offerings.</p>
+        </div>
+
+        <div class="match-pass">
+            <h3>Safety nets</h3>
+            <p>Before flagging a variant for deletion, the tool checks if its SKU exists <em>anywhere</em>
+                in the distributor data. If so, it moves the variant to "Needs Review" instead of "Delete" &mdash;
+                the product is still offered, just couldn't be matched by name.</p>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <h2>Tech Stack</h2>
+
+    <div class="tech-grid">
+        <div class="tech-card">
+            <h3>Backend</h3>
+            <ul>
+                <li><strong>Python 3.12</strong> &mdash; Runtime</li>
+                <li><strong>FastAPI</strong> &mdash; Web framework</li>
+                <li><strong>Jinja2</strong> &mdash; HTML templating</li>
+                <li><strong>Gunicorn + Uvicorn</strong> &mdash; Production server</li>
+            </ul>
+        </div>
+
+        <div class="tech-card">
+            <h3>Data Processing</h3>
+            <ul>
+                <li><strong>pandas</strong> &mdash; DataFrame operations for parsing and matching</li>
+                <li><strong>openpyxl</strong> &mdash; Excel file reading and writing</li>
+            </ul>
+        </div>
+
+        <div class="tech-card">
+            <h3>AI / Matching</h3>
+            <ul>
+                <li><strong>Anthropic SDK</strong> &mdash; Claude API for fuzzy matching</li>
+                <li><strong>Claude Haiku</strong> &mdash; Fast, cost-efficient model for flavor/variant matching</li>
+            </ul>
+        </div>
+
+        <div class="tech-card">
+            <h3>Infrastructure</h3>
+            <ul>
+                <li><strong>Docker</strong> &mdash; Containerized deployment</li>
+                <li><strong>Railway</strong> &mdash; Hosting platform</li>
+                <li><strong>Doppler</strong> &mdash; Secrets management (API keys)</li>
+            </ul>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <h2>Column Auto-Detection</h2>
+    <p class="guide-intro">The tool auto-detects distributor file columns using pattern matching. Here's what it looks for:</p>
+
+    <table class="data-table">
+        <thead>
+            <tr><th>Field</th><th>Example column names detected</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Product Name</td><td><code>Product Name</code>, <code>Item Name</code>, <code>Description</code>, <code>Product Title</code></td></tr>
+            <tr><td>Flavor / Variety</td><td><code>Flavor</code>, <code>Flavour</code>, <code>Variety</code>, <code>Scent</code></td></tr>
+            <tr><td>Size / Weight</td><td><code>Size</code>, <code>Weight</code>, <code>Net Weight</code>, <code>Pack Size</code></td></tr>
+            <tr><td>Price</td><td><code>Price</code>, <code>Cost</code>, <code>MSRP</code>, <code>Wholesale</code></td></tr>
+            <tr><td>SKU</td><td><code>SKU</code>, <code>Item Number</code>, <code>Item #</code>, <code>Product Code</code></td></tr>
+            <tr><td>Manufacturer</td><td><code>Manufacturer</code>, <code>Brand</code>, <code>Vendor</code></td></tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top: 1rem; color: #666; font-size: 0.9rem;">
+        Only <strong>Product Name</strong> is required. All other columns improve matching quality but are optional.
+    </p>
+
+    <hr class="section-divider">
+
+    <h2>Sample Files</h2>
+    <p class="guide-intro">Download these sample files to see the expected format before uploading your own data.</p>
+
+    <div class="sample-downloads">
+        <a href="/static/samples/sample-shopify-export.xlsx" class="sample-card" download>
+            <div class="sample-icon">&#128196;</div>
+            <div>
+                <strong>Sample Shopify Export</strong>
+                <p>Matrixify format with Handle, Title, Options, SKU, Barcode</p>
+            </div>
+        </a>
+        <a href="/static/samples/sample-distributor-list.xlsx" class="sample-card" download>
+            <div class="sample-icon">&#128196;</div>
+            <div>
+                <strong>Sample Distributor List</strong>
+                <p>Product Name, SKU, Flavor, Size, Price, Manufacturer</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="actions-footer">
+        <a href="/" class="btn btn-primary">Start a Sync</a>
+    </div>
+</section>
+{% endblock %}

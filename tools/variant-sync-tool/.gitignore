@@ -4,4 +4,5 @@ __pycache__/
 venv/
 *.xlsx
 *.csv
+!static/samples/*.xlsx
 !requirements.txt
