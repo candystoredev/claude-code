@@ -145,25 +145,38 @@
 
     {% if needs_review %}
     <details class="section-details" open>
-        <summary>Needs Review ({{ counts.needs_review }})</summary>
+        <summary>Needs Review (<span id="review-count">{{ counts.needs_review }}</span>)</summary>
         <div class="details-content">
-            <p class="section-note">These matches have low confidence and need manual verification. Claude's reasoning is shown below.</p>
-            <table class="data-table">
+            <p class="section-note">These matches have low confidence and need manual verification. Use the action buttons to resolve each row. Your decisions update the output file.</p>
+            <table class="data-table review-table">
                 <thead>
                     <tr>
                         <th>Shopify Variant</th>
                         <th>Distributor Product</th>
                         <th>Confidence</th>
                         <th>Reasoning</th>
+                        <th class="actions-col">Action</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="review-tbody">
                     {% for r in needs_review %}
-                    <tr>
+                    <tr data-review-index="{{ loop.index0 }}" class="review-row">
                         <td>{{ r.shopify_label }}</td>
                         <td>{{ r.distributor_label }}</td>
                         <td>{{ "%.0f"|format(r.confidence * 100) }}%</td>
                         <td class="reasoning-cell">{{ r.reasoning }}</td>
+                        <td class="actions-cell">
+                            <div class="review-actions">
+                                <button class="rbtn rbtn-approve" onclick="resolveReview(this, 'approve')" title="Confirm this match is correct">Approve</button>
+                                <div class="reject-group">
+                                    <span class="reject-label">Not a match:</span>
+                                    <button class="rbtn rbtn-reject" onclick="resolveReview(this, 'reject_add')" title="Delete Shopify variant, add distributor product as new">Add as New</button>
+                                    <button class="rbtn rbtn-reject" onclick="resolveReview(this, 'reject_skip')" title="Delete Shopify variant, don't add distributor product">Don't Add</button>
+                                    <button class="rbtn rbtn-neutral" onclick="resolveReview(this, 'reject_keep')" title="Keep Shopify variant as-is, add distributor product as new">Keep Shopify</button>
+                                </div>
+                            </div>
+                            <div class="review-resolved" style="display:none;"></div>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -177,4 +190,94 @@
         <a href="/download/{{ session_id }}" class="btn btn-primary">Download Matrixify File</a>
     </div>
 </section>
+
+<script>
+const SESSION_ID = "{{ session_id }}";
+
+const ACTION_LABELS = {
+    approve: "Approved",
+    reject_add: "Rejected — adding as new",
+    reject_skip: "Rejected — not adding",
+    reject_keep: "Rejected — keeping Shopify variant",
+};
+
+const ACTION_CLASSES = {
+    approve: "resolved-approve",
+    reject_add: "resolved-reject",
+    reject_skip: "resolved-reject",
+    reject_keep: "resolved-neutral",
+};
+
+// Track how many items have been resolved ahead of each original index.
+// Because we pop items from the backend list, later indices shift down.
+let resolvedCount = 0;
+const resolvedSet = new Set();
+
+async function resolveReview(button, action) {
+    const row = button.closest("tr");
+    const originalIndex = parseInt(row.dataset.reviewIndex, 10);
+
+    if (resolvedSet.has(originalIndex)) return;
+
+    // Disable all buttons in this row immediately
+    row.querySelectorAll(".rbtn").forEach(b => { b.disabled = true; });
+
+    // Calculate the actual backend index (shifts down as items are popped)
+    let backendIndex = originalIndex;
+    for (const ri of [...resolvedSet].sort((a, b) => a - b)) {
+        if (ri < originalIndex) backendIndex--;
+    }
+
+    try {
+        const resp = await fetch(`/review/${SESSION_ID}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ review_index: backendIndex, action: action }),
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            alert("Error: " + (err.error || "Unknown error"));
+            row.querySelectorAll(".rbtn").forEach(b => { b.disabled = false; });
+            return;
+        }
+
+        const data = await resp.json();
+
+        // Mark row as resolved
+        resolvedSet.add(originalIndex);
+        resolvedCount++;
+
+        row.classList.add("review-row-resolved", ACTION_CLASSES[action]);
+        const actionsDiv = row.querySelector(".review-actions");
+        const resolvedDiv = row.querySelector(".review-resolved");
+        actionsDiv.style.display = "none";
+        resolvedDiv.style.display = "block";
+        resolvedDiv.textContent = ACTION_LABELS[action];
+
+        // Update all summary counts
+        updateCounts(data.counts);
+    } catch (e) {
+        alert("Network error — please try again.");
+        row.querySelectorAll(".rbtn").forEach(b => { b.disabled = false; });
+    }
+}
+
+function updateCounts(counts) {
+    // Update summary cards
+    const cards = document.querySelectorAll(".summary-cards .card");
+    cards.forEach(card => {
+        const label = card.querySelector(".card-label").textContent.trim().toLowerCase();
+        const numberEl = card.querySelector(".card-number");
+        if (label === "matched") numberEl.textContent = counts.matched;
+        else if (label === "to delete") numberEl.textContent = counts.to_delete;
+        else if (label === "to add") numberEl.textContent = counts.to_add;
+        else if (label === "needs review") numberEl.textContent = counts.needs_review;
+    });
+
+    // Update the review section header count
+    const reviewCountEl = document.getElementById("review-count");
+    if (reviewCountEl) reviewCountEl.textContent = counts.needs_review;
+}
+</script>
 {% endblock %}
