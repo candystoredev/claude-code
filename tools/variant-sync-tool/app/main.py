@@ -43,6 +43,18 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/guide", response_class=HTMLResponse)
+async def guide(request: Request):
+    """Render the how-to-use / tech stack guide page."""
+    return templates.TemplateResponse("guide.html", {"request": request})
+
+
+@app.get("/changelog", response_class=HTMLResponse)
+async def changelog(request: Request):
+    """Render the changelog page."""
+    return templates.TemplateResponse("changelog.html", {"request": request})
+
+
 @app.post("/upload", response_class=HTMLResponse)
 async def upload_and_process(
     request: Request,
