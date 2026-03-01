@@ -283,17 +283,23 @@ def match_by_option_in_name(
     This is the primary matching strategy for flavor/color variants.
     For example, Shopify Option1 Value = "Bubble Gum" matches distributor
     Name = "JELLY BELLY BUBBLE GUM JELLY BEANS".
+
+    Uses optimal assignment: when multiple Shopify options compete for the
+    same distributor row (e.g. "Lemon" and "Lemon Lime" both match
+    "JELLY BELLY LEMON LIME JELLY BEANS"), the more specific match wins
+    (longer option text = higher specificity).
     """
-    matches = []
+    # Phase 1: Build all candidate edges with scores.
+    # candidates[s_idx] = [(d_idx, score), ...] sorted by score descending
+    candidates: dict[int, list[tuple[int, float]]] = {}
 
     for s_idx, s_row in shopify_df.iterrows():
-        # Get option1_value (the flavor/color)
         option_val = str(s_row.get("option1_value", "")).strip()
         if not option_val or option_val.lower() in ("default title", ""):
             continue
 
-        best_match_idx = None
-        best_score = 0.0
+        opt_len = len(normalize_text(option_val).replace(" ", ""))
+        edges: list[tuple[int, float]] = []
 
         for d_idx, d_row in distributor_df.iterrows():
             name = str(d_row.get("product_name", "")).strip()
@@ -301,23 +307,47 @@ def match_by_option_in_name(
                 continue
 
             if _option_matches_name(option_val, name):
-                # Score by specificity: longer option match relative to name
-                # is a stronger signal
-                opt_len = len(normalize_text(option_val).replace(" ", ""))
                 name_len = len(normalize_text(name).replace(" ", ""))
                 score = opt_len / name_len if name_len else 0.0
-                if score > best_score:
-                    best_score = score
-                    best_match_idx = d_idx
+                edges.append((d_idx, score))
 
-        if best_match_idx is not None:
-            matches.append(MatchResult(
-                shopify_idx=s_idx,
-                distributor_idx=best_match_idx,
-                match_type="name",
-                confidence=0.95,
-                reasoning=f"Option '{option_val}' found in distributor name",
-            ))
+        if edges:
+            edges.sort(key=lambda x: -x[1])
+            candidates[s_idx] = edges
+
+    # Phase 2: Resolve conflicts — when multiple Shopify variants want the
+    # same distributor row, the one with the longer (more specific) option
+    # text gets priority.  Losers fall back to their next-best candidate.
+    claimed_dist: dict[int, int] = {}    # d_idx -> s_idx that claimed it
+    assignments: dict[int, int] = {}      # s_idx -> d_idx
+
+    # Process Shopify variants in order of specificity (longest option first)
+    # so more specific options claim their best match before shorter ones.
+    specificity_order = sorted(
+        candidates.keys(),
+        key=lambda s: len(normalize_text(
+            str(shopify_df.loc[s].get("option1_value", ""))
+        ).replace(" ", "")),
+        reverse=True,
+    )
+
+    for s_idx in specificity_order:
+        for d_idx, _score in candidates[s_idx]:
+            if d_idx not in claimed_dist:
+                claimed_dist[d_idx] = s_idx
+                assignments[s_idx] = d_idx
+                break
+
+    matches = []
+    for s_idx, d_idx in assignments.items():
+        option_val = str(shopify_df.loc[s_idx].get("option1_value", "")).strip()
+        matches.append(MatchResult(
+            shopify_idx=s_idx,
+            distributor_idx=d_idx,
+            match_type="name",
+            confidence=0.95,
+            reasoning=f"Option '{option_val}' found in distributor name",
+        ))
 
     return matches
 
@@ -377,9 +407,13 @@ def deterministic_match(
     """Run all deterministic matching passes.
 
     Priority order:
-      1. Option value in distributor name (primary for flavor/color)
-      2. SKU match (supporting — distributors change SKUs frequently)
-      3. Barcode match (only fires if UPC columns are available)
+      1. SKU match (exact identifier — most reliable)
+      2. Barcode match (exact identifier, only fires if UPC columns available)
+      3. Option value in distributor name (fuzzy — used for flavor/color)
+
+    SKU/barcode run first so they claim rows before name matching, preventing
+    ambiguous name matches (e.g. "Lemon" stealing the "Sunkist Lemon" row
+    that should go to "Lemon - Sunkist" via SKU).
 
     Returns:
         Tuple of (matches, unmatched_shopify_indices, unmatched_distributor_indices).
@@ -388,7 +422,7 @@ def deterministic_match(
     matched_distributor: set[int] = set()
     all_matches: list[MatchResult] = []
 
-    for match_fn in [match_by_option_in_name, match_by_sku, match_by_barcode]:
+    for match_fn in [match_by_sku, match_by_barcode, match_by_option_in_name]:
         results = match_fn(shopify_df, distributor_df)
         for result in results:
             if result.shopify_idx not in matched_shopify and result.distributor_idx not in matched_distributor:
