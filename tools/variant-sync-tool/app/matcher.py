@@ -146,6 +146,45 @@ def parse_size_from_price_field(price_text: str) -> str:
     return ""
 
 
+def extract_product_base_words(title: str) -> set[str]:
+    """Extract base product-name words from a Shopify title (minus size info).
+
+    E.g. "Jelly Belly Jelly Beans 3.5oz" → {"jelly", "belly", "beans"}
+    """
+    title = str(title).lower().strip()
+    # Strip size/weight patterns
+    title = re.sub(
+        r"\d+\.?\d*\s*"
+        r"(lb|lbs|pound|pounds|oz|ounce|ounces|g|gram|grams|"
+        r"kg|kilogram|kilograms|ml|milliliter|l|liter|"
+        r"fl\s*oz|ct|count|pc|piece|pk|pack)\b",
+        "",
+        title,
+    )
+    # Remove punctuation, collapse whitespace
+    title = re.sub(r"[^\w\s]", " ", title)
+    # Return unique words of 2+ chars
+    return {w for w in title.split() if len(w) >= 2}
+
+
+def is_product_relevant(shopify_title: str, distributor_name: str, min_ratio: float = 0.75) -> bool:
+    """Check if a distributor product belongs to the same product type.
+
+    Compares base product words from the Shopify title against the
+    distributor product name.  Requires at least ``min_ratio`` (75 %) of the
+    title words to appear in the distributor name.  This prevents suggesting
+    additions for entirely different products that merely share a unit size
+    (e.g. "Candy Corn 3.5oz" should not be suggested for "Jelly Beans 3.5oz").
+    """
+    title_words = extract_product_base_words(shopify_title)
+    if not title_words:
+        return True  # can't determine — be inclusive
+
+    dist_words = {w for w in re.findall(r"\b\w{2,}\b", distributor_name.lower())}
+    overlap = len(title_words & dist_words)
+    return overlap / len(title_words) >= min_ratio
+
+
 def normalize_sku(sku: str) -> str:
     """Normalize a SKU for comparison.
 
@@ -615,7 +654,8 @@ async def run_matching(
     all_to_delete: set[int] = set()
     all_needs_review: list[MatchResult] = []
     global_matched_distributor: set[int] = set()
-    in_scope_distributor: set[int] = set()  # distributor rows that matched at least one product's unit size
+    # Per-handle scope: maps handle → (title, set of in-scope distributor indices)
+    handle_scope: dict[str, tuple[str, set[int]]] = {}
     claude_unavailable = False
 
     # Group Shopify variants by handle (each handle = one product)
@@ -636,8 +676,8 @@ async def run_matching(
             all_to_delete.update(group.index.tolist())
             continue
 
-        # Track which distributor rows are in scope for at least one product
-        in_scope_distributor.update(filtered_dist.index.tolist())
+        # Track which distributor rows are in scope for this specific product
+        handle_scope[handle] = (title, set(filtered_dist.index.tolist()))
 
         # Pass 1: Deterministic matching within this handle group
         det_matches, unmatched_shopify, unmatched_dist = deterministic_match(
@@ -705,12 +745,19 @@ async def run_matching(
     all_needs_review.extend(rescued_to_review)
 
     # Distributor products not matched to any Shopify variant.
-    # Only suggest additions from rows whose unit size matched at least one
-    # Shopify product — otherwise we'd suggest completely unrelated products
-    # (e.g. 8ct window decals for a 10lb candy product).
+    # A distributor item is only a candidate for addition if:
+    #   1. Its unit size matched a Shopify product (it was "in scope"), AND
+    #   2. Its product name is relevant to that Shopify product (not just
+    #      the same size but a completely different product type).
     all_matched_dist = {m.distributor_idx for m in all_matched if m.distributor_idx is not None}
     all_matched_dist |= global_matched_distributor
-    to_add_indices = in_scope_distributor - all_matched_dist
+
+    to_add_indices: set[int] = set()
+    for _handle, (h_title, scope_indices) in handle_scope.items():
+        for d_idx in scope_indices - all_matched_dist:
+            dist_name = str(distributor_df.loc[d_idx].get("product_name", ""))
+            if is_product_relevant(h_title, dist_name):
+                to_add_indices.add(d_idx)
 
     return {
         "matched": [m.to_dict() for m in all_matched],
