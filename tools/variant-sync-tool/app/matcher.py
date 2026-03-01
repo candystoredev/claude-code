@@ -167,16 +167,88 @@ def extract_product_base_words(title: str) -> set[str]:
     return {w for w in title.split() if len(w) >= 2}
 
 
-def is_product_relevant(shopify_title: str, distributor_name: str, min_ratio: float = 0.75) -> bool:
+def parse_guidance(guidance: str) -> dict:
+    """Parse a human guidance string into structured hints.
+
+    Example input: "flavors for Jelly Belly Jelly Beans in 10lb units"
+    Returns: {
+        "size": "10lb",
+        "dimension": "flavor",
+        "brand_keywords": {"jelly", "belly", "beans"},
+        "raw": "flavors for Jelly Belly Jelly Beans in 10lb units",
+    }
+    """
+    result: dict = {"size": "", "dimension": "", "brand_keywords": set(), "raw": guidance}
+
+    if not guidance:
+        return result
+
+    text = guidance.strip()
+
+    # Extract size hint (e.g., "10lb", "3.5oz")
+    size = extract_size_from_title(text)
+    if size:
+        result["size"] = size
+
+    # Detect match dimension (what we're matching on)
+    dimension_map = {
+        "flavor": r"\bflavou?rs?\b",
+        "color": r"\bcolou?rs?\b",
+        "scent": r"\bscents?\b",
+        "variety": r"\bvariet(?:y|ies)\b",
+        "size": r"\bsizes?\b",
+        "style": r"\bstyles?\b",
+    }
+    for dim, pattern in dimension_map.items():
+        if re.search(pattern, text, re.IGNORECASE):
+            result["dimension"] = dim
+            break
+
+    # Extract brand/product keywords — strip out the size, dimension words,
+    # and common filler like "for", "in", "units"
+    cleaned = text
+    # Remove size patterns
+    cleaned = re.sub(
+        r"\d+\.?\d*\s*"
+        r"(lb|lbs|pound|pounds|oz|ounce|ounces|g|gram|grams|"
+        r"kg|kilogram|kilograms|ml|milliliter|l|liter|"
+        r"fl\s*oz|ct|count|pc|piece|pk|pack)\b",
+        "", cleaned, flags=re.IGNORECASE,
+    )
+    # Remove dimension words and common filler
+    filler = {"for", "in", "of", "the", "a", "an", "and", "with", "units", "unit",
+              "flavors", "flavor", "flavours", "flavour", "colors", "color",
+              "colours", "colour", "scents", "scent", "varieties", "variety",
+              "sizes", "size", "styles", "style"}
+    words = re.findall(r"\b[a-zA-Z]{2,}\b", cleaned)
+    brand_words = {w.lower() for w in words if w.lower() not in filler}
+    result["brand_keywords"] = brand_words
+
+    return result
+
+
+def is_product_relevant(
+    shopify_title: str,
+    distributor_name: str,
+    min_ratio: float = 0.75,
+    guidance_keywords: set[str] | None = None,
+) -> bool:
     """Check if a distributor product belongs to the same product type.
 
-    Compares base product words from the Shopify title against the
-    distributor product name.  Requires at least ``min_ratio`` (75 %) of the
-    title words to appear in the distributor name.  This prevents suggesting
-    additions for entirely different products that merely share a unit size
-    (e.g. "Candy Corn 3.5oz" should not be suggested for "Jelly Beans 3.5oz").
+    When ``guidance_keywords`` are provided (from human guidance), uses those
+    instead of extracting words from the Shopify title.  This gives much
+    better filtering because the human has told us exactly which product
+    we're looking for.
+
+    Without guidance, compares base product words from the Shopify title
+    against the distributor product name.  Requires at least ``min_ratio``
+    (75 %) of the title words to appear in the distributor name.
     """
-    title_words = extract_product_base_words(shopify_title)
+    if guidance_keywords:
+        title_words = guidance_keywords
+    else:
+        title_words = extract_product_base_words(shopify_title)
+
     if not title_words:
         return True  # can't determine — be inclusive
 
@@ -503,7 +575,25 @@ Rules:
 - Be conservative — only return high confidence (>0.85) for clear matches"""
 
 
-def _build_claude_prompt(shopify_row: pd.Series, candidates: pd.DataFrame) -> str:
+def _build_system_prompt(human_guidance: str | None = None) -> str:
+    """Build the system prompt, optionally enhanced with human guidance."""
+    prompt = SYSTEM_PROMPT
+    if human_guidance:
+        prompt += (
+            f"\n\nIMPORTANT — Human guidance from the operator:\n"
+            f'"{human_guidance}"\n'
+            f"Use this guidance to understand what dimension to match on "
+            f"(e.g. flavors, colors) and which product/brand this is for. "
+            f"This should help you make more accurate matches."
+        )
+    return prompt
+
+
+def _build_claude_prompt(
+    shopify_row: pd.Series,
+    candidates: pd.DataFrame,
+    human_guidance: str | None = None,
+) -> str:
     """Build the user prompt for Claude matching."""
     shopify_info = {
         "title": str(shopify_row.get("title", "")),
@@ -520,10 +610,15 @@ def _build_claude_prompt(shopify_row: pd.Series, candidates: pd.DataFrame) -> st
             "sku": str(row.get("sku", "")),
         })
 
-    return (
-        f"Shopify variant:\n{json.dumps(shopify_info, indent=2)}\n\n"
-        f"Candidate distributor products:\n{json.dumps(candidate_list, indent=2)}"
-    )
+    parts = [
+        f"Shopify variant:\n{json.dumps(shopify_info, indent=2)}",
+        f"Candidate distributor products:\n{json.dumps(candidate_list, indent=2)}",
+    ]
+
+    if human_guidance:
+        parts.append(f"Human guidance: {human_guidance}")
+
+    return "\n\n".join(parts)
 
 
 async def claude_match_batch(
@@ -531,6 +626,7 @@ async def claude_match_batch(
     distributor_df: pd.DataFrame,
     unmatched_shopify: set[int],
     unmatched_distributor: set[int],
+    human_guidance: str | None = None,
 ) -> list[MatchResult]:
     """Use Claude API to match remaining unresolved records."""
     if not ANTHROPIC_API_KEY:
@@ -547,6 +643,7 @@ async def claude_match_batch(
     distributor_candidates = distributor_df.loc[list(unmatched_distributor)]
     results: list[MatchResult] = []
     matched_distributor_indices: set[int] = set()
+    system_prompt = _build_system_prompt(human_guidance)
 
     for shopify_idx in unmatched_shopify:
         shopify_row = shopify_df.loc[shopify_idx]
@@ -564,13 +661,13 @@ async def claude_match_batch(
             continue
 
         batch = available.head(MAX_CLAUDE_BATCH_SIZE)
-        prompt = _build_claude_prompt(shopify_row, batch)
+        prompt = _build_claude_prompt(shopify_row, batch, human_guidance)
 
         try:
             response = await client.messages.create(
                 model=API_MODEL,
                 max_tokens=API_MAX_TOKENS,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -634,14 +731,22 @@ def _fallback_unmatched(unmatched_shopify: set[int]) -> list[MatchResult]:
 async def run_matching(
     shopify_df: pd.DataFrame,
     distributor_df: pd.DataFrame,
+    human_guidance: str | None = None,
 ) -> dict:
     """Run the full matching pipeline, scoped per Shopify product (handle).
 
     For each Shopify product handle:
-      1. Extract the unit size from the product title.
+      1. Extract the unit size from the product title (or from human guidance).
       2. Filter distributor rows to those offered in that unit size.
-      3. Run deterministic matching (option-in-name, SKU, barcode).
-      4. Run Claude fallback for any remaining unmatched variants.
+      3. Optionally filter by brand keywords from human guidance.
+      4. Run deterministic matching (option-in-name, SKU, barcode).
+      5. Run Claude fallback for any remaining unmatched variants.
+
+    Args:
+        shopify_df: Parsed Shopify DataFrame.
+        distributor_df: Parsed distributor DataFrame.
+        human_guidance: Optional free-text guidance from the user describing
+            what to match (e.g. "flavors for Jelly Belly Jelly Beans in 10lb units").
 
     Returns a dict with categorized results:
       - matched: high-confidence matches
@@ -658,18 +763,47 @@ async def run_matching(
     handle_scope: dict[str, tuple[str, set[int]]] = {}
     claude_unavailable = False
 
+    # Parse human guidance for structured hints
+    guidance = parse_guidance(human_guidance or "")
+    guidance_size = guidance["size"]
+    guidance_keywords = guidance["brand_keywords"] if guidance["brand_keywords"] else None
+
+    if guidance_size:
+        logger.info("Human guidance size hint: %s", guidance_size)
+    if guidance_keywords:
+        logger.info("Human guidance brand keywords: %s", guidance_keywords)
+
     # Group Shopify variants by handle (each handle = one product)
     handles = shopify_df.groupby("handle", sort=False)
 
     for handle, group in handles:
         # Extract unit size from the product title (same for all rows in group)
         title = str(group.iloc[0]["title"])
-        target_size = extract_size_from_title(title)
+        target_size = guidance_size or extract_size_from_title(title)
 
         # Filter distributor rows to matching unit size
         filtered_dist = filter_distributor_by_size(
             distributor_df, target_size, exclude=global_matched_distributor
         )
+
+        # When human guidance provides brand keywords, further filter distributor
+        # rows to only those relevant to the specified product.
+        if guidance_keywords and not filtered_dist.empty:
+            relevance_mask = filtered_dist.apply(
+                lambda row: is_product_relevant(
+                    title, str(row.get("product_name", "")),
+                    min_ratio=0.50,
+                    guidance_keywords=guidance_keywords,
+                ),
+                axis=1,
+            )
+            guidance_filtered = filtered_dist[relevance_mask]
+            if not guidance_filtered.empty:
+                logger.info(
+                    "Guidance filter narrowed distributor rows from %d to %d for handle '%s'",
+                    len(filtered_dist), len(guidance_filtered), handle,
+                )
+                filtered_dist = guidance_filtered
 
         if filtered_dist.empty:
             # No distributor products match this size — all variants are deletions
@@ -696,7 +830,8 @@ async def run_matching(
                 claude_results = _fallback_unmatched(unmatched_shopify)
             else:
                 claude_results = await claude_match_batch(
-                    group, filtered_dist, unmatched_shopify, unmatched_dist
+                    group, filtered_dist, unmatched_shopify, unmatched_dist,
+                    human_guidance=human_guidance,
                 )
                 unmatched_claude = [r for r in claude_results if r.match_type == "unmatched"]
                 if unmatched_claude and all(
@@ -756,7 +891,7 @@ async def run_matching(
     for _handle, (h_title, scope_indices) in handle_scope.items():
         for d_idx in scope_indices - all_matched_dist:
             dist_name = str(distributor_df.loc[d_idx].get("product_name", ""))
-            if is_product_relevant(h_title, dist_name):
+            if is_product_relevant(h_title, dist_name, guidance_keywords=guidance_keywords):
                 to_add_indices.add(d_idx)
 
     return {

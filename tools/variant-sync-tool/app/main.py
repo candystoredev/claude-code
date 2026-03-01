@@ -61,6 +61,8 @@ async def upload_and_process(
     shopify_file: UploadFile = File(...),
     distributor_file: UploadFile = File(...),
     manufacturer_filter: str = Form(""),
+    product_handle: str = Form(""),
+    human_guidance: str = Form(""),
 ):
     """Handle file uploads, parse, match, and render results."""
     errors = []
@@ -140,9 +142,27 @@ async def upload_and_process(
             "detection_status": detection_status,
         })
 
+    # Filter Shopify data to a single product handle if specified
+    handle_filter = product_handle.strip().lower() or None
+    if handle_filter:
+        mask = shopify_df["handle"].str.strip().str.lower() == handle_filter
+        if not mask.any():
+            available_handles = sorted(shopify_df["handle"].str.strip().str.lower().unique())
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "errors": [
+                    f"Handle '{handle_filter}' not found in Shopify export. "
+                    f"Available handles: {', '.join(available_handles[:20])}"
+                    + (" ..." if len(available_handles) > 20 else "")
+                ],
+            })
+        shopify_df = shopify_df[mask].reset_index(drop=True)
+        logger.info("Filtered to handle '%s': %d variants", handle_filter, len(shopify_df))
+
     # Run matching
+    guidance = human_guidance.strip() or None
     try:
-        match_results = await run_matching(shopify_df, distributor_df)
+        match_results = await run_matching(shopify_df, distributor_df, human_guidance=guidance)
     except Exception as e:
         logger.exception("Matching failed")
         return templates.TemplateResponse("index.html", {
