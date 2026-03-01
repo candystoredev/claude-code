@@ -59,6 +59,20 @@
                    placeholder="e.g. Optimum Nutrition">
         </div>
 
+        <div class="form-group">
+            <label for="product_handle">Shopify Product Handle (optional)</label>
+            <p class="form-help">Focus on a single product by entering its handle. Leave blank to process all products in the export.</p>
+            <input type="text" id="product_handle" name="product_handle"
+                   placeholder="e.g. jelly-belly-jelly-beans">
+        </div>
+
+        <div class="form-group">
+            <label for="human_guidance">Matching Guidance (optional)</label>
+            <p class="form-help">Describe what you're matching to help the tool filter and match more accurately.</p>
+            <textarea id="human_guidance" name="human_guidance" rows="2"
+                      placeholder="e.g. flavors for Jelly Belly Jelly Beans in 10lb units"></textarea>
+        </div>
+
         <button type="submit" class="btn btn-primary" id="submit-btn">Run Sync</button>
     </form>
 
