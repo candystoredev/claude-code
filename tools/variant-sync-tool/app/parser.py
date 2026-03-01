@@ -30,14 +30,17 @@ SHOPIFY_COLUMNS = {
     "variant_weight_unit": "Variant Weight Unit",
 }
 
-# Patterns used to auto-detect distributor columns
+# Patterns used to auto-detect distributor columns.
+# Order matters: fields listed earlier claim columns first, preventing
+# later fields from using them.  Within each field the patterns are in
+# priority order (earlier pattern → higher confidence score).
 DISTRIBUTOR_FIELD_PATTERNS = {
     "product_name": [
         r"product[\s_-]*name",
-        r"item[\s_-]*name",
-        r"description",
-        r"product[\s_-]*title",
         r"^name$",
+        r"item[\s_-]*name",
+        r"product[\s_-]*title",
+        r"description",
         r"item[\s_-]*description",
     ],
     "flavor": [
@@ -55,6 +58,18 @@ DISTRIBUTOR_FIELD_PATTERNS = {
         r"pack[\s_-]*size",
         r"option[\s_-]*2",
     ],
+    # price_inner and price_case must come before generic "price" so they
+    # claim their columns first; otherwise "price" would grab them.
+    "price_inner": [
+        r"price[\s_-]*inner",
+        r"inner[\s_-]*price",
+        r"each[\s_-]*price",
+        r"price[\s_-]*each",
+    ],
+    "price_case": [
+        r"price[\s_-]*case",
+        r"case[\s_-]*price",
+    ],
     "price": [
         r"price",
         r"cost",
@@ -70,27 +85,6 @@ DISTRIBUTOR_FIELD_PATTERNS = {
         r"item[\s_-]*no",
         r"product[\s_-]*code",
         r"catalog[\s_-]*#",
-    ],
-    "upc": [
-        r"upc",
-        r"barcode",
-        r"ean",
-        r"gtin",
-    ],
-    "image_url": [
-        r"image",
-        r"img",
-        r"photo",
-        r"picture",
-        r"image[\s_-]*url",
-    ],
-    "availability": [
-        r"availab",
-        r"stock",
-        r"in[\s_-]*stock",
-        r"status",
-        r"qty",
-        r"quantity",
     ],
     "manufacturer": [
         r"manufacturer",
@@ -278,7 +272,7 @@ def get_detection_status(confidence: dict) -> dict:
     Returns a dict with 'detected', 'missing', and 'needs_review' lists.
     """
     required = ["product_name"]
-    helpful = ["flavor", "size", "price", "sku", "upc"]
+    helpful = ["sku", "price", "price_inner", "price_case", "manufacturer"]
 
     detected = []
     missing = []
