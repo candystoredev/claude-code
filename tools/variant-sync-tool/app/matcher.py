@@ -581,6 +581,7 @@ async def run_matching(
     all_to_delete: set[int] = set()
     all_needs_review: list[MatchResult] = []
     global_matched_distributor: set[int] = set()
+    in_scope_distributor: set[int] = set()  # distributor rows that matched at least one product's unit size
     claude_unavailable = False
 
     # Group Shopify variants by handle (each handle = one product)
@@ -600,6 +601,9 @@ async def run_matching(
             # No distributor products match this size — all variants are deletions
             all_to_delete.update(group.index.tolist())
             continue
+
+        # Track which distributor rows are in scope for at least one product
+        in_scope_distributor.update(filtered_dist.index.tolist())
 
         # Pass 1: Deterministic matching within this handle group
         det_matches, unmatched_shopify, unmatched_dist = deterministic_match(
@@ -640,14 +644,43 @@ async def run_matching(
         elif unmatched_shopify:
             all_to_delete.update(unmatched_shopify)
 
-    # Distributor products not matched to any Shopify variant
+    # Safety net: don't flag a Shopify variant for deletion if its SKU
+    # exists anywhere in the distributor data — that means the product is
+    # still offered, we just failed to match it via name/Claude.
+    dist_sku_set: set[str] = set()
+    for _, row in distributor_df.iterrows():
+        sku = normalize_sku(row.get("sku", ""))
+        if sku:
+            dist_sku_set.add(sku)
+
+    safe_to_delete: list[int] = []
+    rescued_to_review: list[MatchResult] = []
+    for s_idx in all_to_delete:
+        shopify_sku = normalize_sku(shopify_df.loc[s_idx].get("variant_sku", ""))
+        if shopify_sku and shopify_sku in dist_sku_set:
+            # SKU still exists in distributor data — don't delete, flag for review
+            rescued_to_review.append(MatchResult(
+                shopify_idx=s_idx,
+                match_type="review",
+                confidence=0.0,
+                reasoning="SKU found in distributor data but name match failed — needs manual review",
+            ))
+        else:
+            safe_to_delete.append(s_idx)
+
+    all_needs_review.extend(rescued_to_review)
+
+    # Distributor products not matched to any Shopify variant.
+    # Only suggest additions from rows whose unit size matched at least one
+    # Shopify product — otherwise we'd suggest completely unrelated products
+    # (e.g. 8ct window decals for a 10lb candy product).
     all_matched_dist = {m.distributor_idx for m in all_matched if m.distributor_idx is not None}
     all_matched_dist |= global_matched_distributor
-    to_add_indices = set(distributor_df.index) - all_matched_dist
+    to_add_indices = in_scope_distributor - all_matched_dist
 
     return {
         "matched": [m.to_dict() for m in all_matched],
-        "to_delete": list(all_to_delete),
+        "to_delete": safe_to_delete,
         "to_add": list(to_add_indices),
         "needs_review": [r.to_dict() for r in all_needs_review],
         "claude_unavailable": claude_unavailable,

@@ -63,8 +63,6 @@ DISTRIBUTOR_FIELD_PATTERNS = {
     "price_inner": [
         r"price[\s_-]*inner",
         r"inner[\s_-]*price",
-        r"each[\s_-]*price",
-        r"price[\s_-]*each",
     ],
     "price_case": [
         r"price[\s_-]*case",
