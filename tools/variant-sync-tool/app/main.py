@@ -4,9 +4,10 @@ import logging
 import uuid
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from app.config import MAX_UPLOAD_SIZE_MB
 from app.matcher import run_matching
@@ -180,11 +181,16 @@ async def upload_and_process(
             "errors": [f"Output generation failed: {e}"],
         })
 
-    # Store only the output file bytes for download — avoid holding
-    # DataFrames in memory across requests.
+    # Store session data — DataFrames and match results are kept so that
+    # review actions can update match_results and regenerate the output file.
     session_id = str(uuid.uuid4())
     _cleanup_sessions()
-    _sessions[session_id] = {"output_bytes": output_bytes}
+    _sessions[session_id] = {
+        "output_bytes": output_bytes,
+        "shopify_df": shopify_df,
+        "distributor_df": distributor_df,
+        "match_results": match_results,
+    }
 
     # Build display data for results
     matched_display = []
@@ -263,3 +269,84 @@ async def download_output(session_id: str):
             "Content-Disposition": "attachment; filename=variant-sync-output.xlsx",
         },
     )
+
+
+class ReviewAction(BaseModel):
+    review_index: int
+    action: str  # "approve" | "reject_add" | "reject_skip" | "reject_keep"
+
+
+@app.post("/review/{session_id}")
+async def resolve_review(session_id: str, body: ReviewAction):
+    """Resolve a single needs-review item and regenerate the output file.
+
+    Actions:
+      - approve:      Confirm match → move to matched.
+      - reject_add:   Not a match → delete Shopify variant, add distributor product.
+      - reject_skip:  Not a match → delete Shopify variant, don't add distributor.
+      - reject_keep:  Not a match → keep Shopify variant, add distributor product.
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        return JSONResponse(
+            {"error": "Session expired or not found."},
+            status_code=404,
+        )
+
+    match_results = session["match_results"]
+    needs_review = match_results["needs_review"]
+
+    if body.review_index < 0 or body.review_index >= len(needs_review):
+        return JSONResponse(
+            {"error": "Invalid review index."},
+            status_code=400,
+        )
+
+    if body.action not in ("approve", "reject_add", "reject_skip", "reject_keep"):
+        return JSONResponse(
+            {"error": f"Unknown action: {body.action}"},
+            status_code=400,
+        )
+
+    # Pop the review item (indices shift down for subsequent items)
+    review_item = needs_review.pop(body.review_index)
+    shopify_idx = review_item["shopify_idx"]
+    distributor_idx = review_item["distributor_idx"]
+
+    if body.action == "approve":
+        # Confirm the match — move to matched list
+        review_item["match_type"] = "approved"
+        review_item["confidence"] = 1.0
+        match_results["matched"].append(review_item)
+
+    elif body.action == "reject_add":
+        # Not a match — delete Shopify variant, add distributor as new
+        if shopify_idx is not None:
+            match_results["to_delete"].append(shopify_idx)
+        if distributor_idx is not None:
+            match_results["to_add"].append(distributor_idx)
+
+    elif body.action == "reject_skip":
+        # Not a match — delete Shopify variant, don't add distributor
+        if shopify_idx is not None:
+            match_results["to_delete"].append(shopify_idx)
+
+    elif body.action == "reject_keep":
+        # Not a match — keep Shopify variant, add distributor as new
+        if distributor_idx is not None:
+            match_results["to_add"].append(distributor_idx)
+
+    # Regenerate the output file with updated results
+    shopify_df = session["shopify_df"]
+    distributor_df = session["distributor_df"]
+    session["output_bytes"] = generate_output(shopify_df, distributor_df, match_results)
+
+    return JSONResponse({
+        "ok": True,
+        "counts": {
+            "matched": len(match_results["matched"]),
+            "to_delete": len(match_results["to_delete"]),
+            "to_add": len(match_results["to_add"]),
+            "needs_review": len(match_results["needs_review"]),
+        },
+    })
