@@ -19,9 +19,6 @@ Usage:
 
     # Custom input/output files
     python generate.py --input input/my_products.csv --output output/my_results.csv
-
-    # Specify which column holds the individual package size
-    python generate.py --size-column units_01
 """
 
 import argparse
@@ -35,7 +32,12 @@ from collections import defaultdict
 import anthropic
 
 import config
-from prompt_template import SYSTEM_PROMPT, build_user_prompt
+from prompt_template import (
+    SYSTEM_PROMPT,
+    build_user_prompt,
+    compute_name_budget,
+    get_unit_size,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -90,11 +92,16 @@ def write_all_rows(filepath: str, fieldnames: list[str], rows: list[dict]):
 # ---------------------------------------------------------------------------
 
 def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
-    """Call Claude to produce a single product name (no size, max 56 chars)."""
-    user_text = build_user_prompt(row)
+    """Generate a product name with unit size appended from CSV data.
+
+    The model generates only the name portion.  The code appends
+    " - {unit_size}" from the CSV so the model can never hallucinate it.
+    """
+    unit_size = get_unit_size(row)
+    name_budget = compute_name_budget(unit_size)
+    user_text = build_user_prompt(row, char_budget=name_budget)
     messages = [{"role": "user", "content": user_text}]
 
-    max_chars = 56
     max_retries = 3
 
     for attempt in range(max_retries):
@@ -104,25 +111,32 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
             system=SYSTEM_PROMPT,
             messages=messages,
         )
-        result = message.content[0].text.strip()
+        name_part = message.content[0].text.strip()
 
-        if len(result) <= max_chars:
-            return result
+        # Strip any trailing dash/size the model may have added despite instructions
+        if " - " in name_part:
+            name_part = name_part.rsplit(" - ", 1)[0].strip()
+
+        if len(name_part) <= name_budget:
+            break
 
         # Too long — ask the model to shorten
-        print(f"({len(result)} chars, retrying)", end=" ", flush=True)
-        messages.append({"role": "assistant", "content": result})
+        print(f"({len(name_part)} chars, retrying)", end=" ", flush=True)
+        messages.append({"role": "assistant", "content": name_part})
         messages.append(
             {
                 "role": "user",
                 "content": (
-                    f"That is {len(result)} characters. "
-                    f"It MUST be {max_chars} or fewer. Shorten it further."
+                    f"That is {len(name_part)} characters. "
+                    f"It MUST be {name_budget} or fewer. Shorten it further."
                 ),
             }
         )
 
-    return result  # best effort after retries
+    # Assemble final name: product name + unit size from data
+    if unit_size:
+        return f"{name_part} - {unit_size}"
+    return name_part
 
 
 # ---------------------------------------------------------------------------
@@ -146,11 +160,13 @@ def extract_package_size(text: str) -> str:
     return ""
 
 
-def deduplicate_names(
-    rows: list[dict],
-    size_col: str = "units_01",
-) -> int:
-    """Insert package size into names that collide. Returns count modified."""
+def deduplicate_names(rows: list[dict]) -> int:
+    """Flag duplicate product names for review. Returns count flagged.
+
+    Since unit sizes are now appended from CSV data, duplicates indicate
+    genuinely identical products that need manual differentiation (e.g.
+    inserting the individual package size to tell them apart).
+    """
     # Group successful rows by their generated name
     name_groups: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
@@ -164,9 +180,9 @@ def deduplicate_names(
             continue  # unique — nothing to do
 
         for row in group:
-            # Try the designated size column first, then fall back to others
+            # Try to differentiate by inserting the individual package size
             size = ""
-            for col in (size_col, "Title", "description", "description_mini_01"):
+            for col in ("Title", "description", "description_mini_01"):
                 size = extract_package_size(row.get(col, ""))
                 if size:
                     break
@@ -228,11 +244,6 @@ def main():
         "--resume",
         action="store_true",
         help="Resume from previous run, skipping already-processed SKUs",
-    )
-    parser.add_argument(
-        "--size-column",
-        default="units_01",
-        help="CSV column containing individual package size (default: units_01)",
     )
     args = parser.parse_args()
 
@@ -348,7 +359,7 @@ def main():
 
     # Reload the full output so dedup covers previously-resumed rows too
     all_rows = load_csv(output_path)
-    dedup_count = deduplicate_names(all_rows, size_col=args.size_column)
+    dedup_count = deduplicate_names(all_rows)
 
     if dedup_count > 0:
         write_all_rows(output_path, fieldnames, all_rows)

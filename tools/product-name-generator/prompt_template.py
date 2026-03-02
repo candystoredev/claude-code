@@ -1,36 +1,68 @@
-"""Prompt template for candy product name generation."""
+"""Prompt template for candy product name generation.
 
-SYSTEM_PROMPT = """You generate standardized product names for an online candy and snack wholesale store.
+See SPEC.md for the full specification and examples.
+"""
 
-OUTPUT FORMAT:
-  [Product Name] - [Quantity]
+# The model generates ONLY the product-name portion (before the dash).
+# The code appends " - {unit_size}" from the CSV data afterward.
+# char_budget = 56 - len(" - ") - len(unit_size)
 
-Everything before the dash is the product name. After the dash is the case quantity.
+SYSTEM_PROMPT = """You generate the product-name portion of a standardized product listing for an online candy and snack wholesale store.
+
+IMPORTANT: You are generating ONLY the product name. Do NOT include a unit size, case count, or anything after a dash. The unit size is added separately by the system.
+
+CASING: Always output in Title Case. Input is often ALL CAPS — convert it. Use standard brand casing where known (e.g. "M&M's", "Pixy Stix", "Reese's").
+
+BRAND NAME RULES:
+- Only include the brand/vendor name when it helps describe WHAT the product is.
+- If the brand IS the product (Pixy Stix, M&M's, Reese's, Skittles, etc.), include it where it reads naturally.
+- If the brand is a generic distributor or unknown to most consumers (e.g. Boston America, Palmer, Herbert's Best), OMIT IT entirely.
+- When included, the brand does NOT have to come first. Put descriptors like color or flavor before the brand if that reads more naturally (e.g. "Yellow M&M's Candy" not "M&M's Yellow Candy").
 
 RULES:
-1. Brand name comes first, exactly as provided (never alter brand spelling).
-2. Follow with product type, primary flavor or variety, and packaging format.
-3. End with " - " followed by the case quantity (e.g. "12ct", "24pk", "36ct").
-4. OMIT individual package sizes (oz, g, lb, ml) entirely. Do not include them.
-5. OMIT pricing, UPC codes, and distributor-specific jargon.
-6. OMIT marketing language or words not present in the source data.
+1. Describe what the product IS: product type, primary flavor/variety, distinguishing features.
+2. OMIT individual package sizes (oz, g, lb, ml) from the name.
+3. OMIT pricing, UPC codes, and distributor-specific jargon.
+4. OMIT marketing language or words not present in the source data.
+5. Do NOT add any information that isn't in the source data.
 
-HARD LIMIT: 56 characters or fewer (counting every character including spaces, dash, and quantity). If your result exceeds 56 characters, shorten it until it fits.
+CHARACTER LIMIT: The result must fit within the character budget provided. If it exceeds the budget, shorten it.
 
-SHORTENING STRATEGIES (apply in order until it fits):
-1. Drop redundant packaging words: "Peg Bag" to "Bag", "Theater Box" to "Box", "Laydown Bag" to "Bag"
-2. Abbreviate "Chocolate" to "Choc"
-3. Drop secondary flavors or modifiers (keep the primary one)
-4. Remove filler words: "with", "and", "the", "flavored"
-5. Shorten brand name only as a last resort
+SHORTENING STRATEGIES (apply in order):
+1. Drop redundant packaging words: "Peg Bag" → "Bag", "Theater Box" → "Box", "Laydown Bag" → "Bag"
+2. Remove filler words: "with", "and", "the", "flavored", "Breaks", "Bags", "Tubs", "Boxes"
+3. Abbreviate "Chocolate" to "Choc"
+4. Drop secondary flavors or modifiers (keep the primary one)
+5. Drop or abbreviate the brand name (last resort)
 
-PRIORITY ORDER: brand > product type > primary flavor > quantity
+PRIORITY ORDER: product type > primary flavor > brand name
 
-Return only the product name, nothing else."""
+Return only the product name text. No dash, no unit size, no extra commentary."""
 
 
-def build_user_prompt(row: dict) -> str:
-    """Build the user prompt from a CSV row."""
+# Column name for unit size — matches the CSV header
+UNIT_SIZE_COLUMN = "Distributor Unit Size"
+
+
+def get_unit_size(row: dict) -> str:
+    """Extract the unit size from the CSV row."""
+    return (row.get(UNIT_SIZE_COLUMN) or "").strip()
+
+
+def compute_name_budget(unit_size: str, total_limit: int = 56) -> int:
+    """Return the max character count for the product-name portion."""
+    if unit_size:
+        # Account for " - " (3 chars) plus the unit size string
+        return total_limit - 3 - len(unit_size)
+    return total_limit
+
+
+def build_user_prompt(row: dict, char_budget: int | None = None) -> str:
+    """Build the user prompt from a CSV row.
+
+    If *char_budget* is provided it is included so the model knows how
+    many characters it has to work with.
+    """
     parts = [f"Product title: {row.get('Title', '')}"]
 
     if row.get("Vendor"):
@@ -38,9 +70,6 @@ def build_user_prompt(row: dict) -> str:
 
     if row.get("description"):
         parts.append(f"Current description: {row['description']}")
-
-    if row.get("units_01"):
-        parts.append(f"Units/sizing: {row['units_01']}")
 
     if row.get("certifications"):
         parts.append(f"Certifications: {row['certifications']}")
@@ -60,8 +89,13 @@ def build_user_prompt(row: dict) -> str:
     if minis:
         parts.append(f"Additional details: {' | '.join(minis)}")
 
+    if char_budget is not None:
+        parts.append(
+            f"\nCharacter budget: {char_budget} characters maximum."
+        )
+
     parts.append(
-        "\nGenerate the product name following the rules. "
+        "Generate the product name following the rules. "
         "Return only the product name, nothing else."
     )
 
