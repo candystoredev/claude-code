@@ -52,14 +52,35 @@ The brand name is **NOT automatically placed at the beginning**. Apply these rul
 - The code appends ` - {unit_size}` to whatever name the model returns.
 - The model's character budget is therefore `56 - len(" - ") - len(unit_size)`.
 
+## Packaging Formats — Keep vs Drop
+
+Some packaging formats distinguish different products and **must be kept**. Others
+are redundant noise and should be dropped or simplified.
+
+**KEEP** (these differentiate products — a customer needs to know):
+- Changemaker
+- Peg Bag
+- Gift Bag
+- Fun Size
+- King Size
+- Snack Size
+- Variety Pack
+- Bulk
+
+**DROP or simplify** (redundant noise):
+- "Theater Box" → "Box"
+- "Laydown Bag" → "Bag"
+- "Tubs", "Boxes", "Breaks" (generic, adds nothing)
+
+**Rule of thumb:** if the packaging term tells the customer what they're getting
+(e.g. a Changemaker vs a bag of Pixy Stix are different products), keep it.
+
 ## Shortening Strategies
 
 When the product name portion exceeds its character budget, apply these in order:
 
-1. Drop redundant packaging words: "Peg Bag" → "Bag", "Theater Box" → "Box",
-   "Laydown Bag" → "Bag"
-2. Remove filler words: "with", "and", "the", "flavored", "Breaks", "Bags",
-   "Tubs", "Boxes"
+1. Drop redundant/noise packaging words (see DROP list above)
+2. Remove filler words: "with", "and", "the", "flavored"
 3. Abbreviate "Chocolate" to "Choc"
 4. Drop secondary flavors or modifiers (keep the primary one)
 5. Drop or abbreviate the brand name (last resort)
@@ -99,6 +120,6 @@ When the product name portion exceeds its character budget, apply these in order
 | TAFFY TOWN SALT WATER TAFFY RED LICORICE SWIRLS   | TAFFY TOWN     | 2.5lb     | Red Licorice Swirls Taffy Town - 2.5lb  |
 | GUMMY RUDOLPH 3.88 OZ                             | BOSTON AMERICA  | 9ct       | Gummy Rudolph Strawberry - 9ct          |
 | CHOCO FLUFF PUMPKINS 9 LB                         | PALMER         | 9lb       | Choco Fluff Pumpkins - 9lb              |
-| PIXY STIX ASSORTED CHANGEMAKER 0.42 OZ            | PIXY STIX      | 85ct      | Pixy Stix Assorted Powder Candy - 85ct  |
+| PIXY STIX ASSORTED CHANGEMAKER 0.42 OZ            | PIXY STIX      | 85ct      | Pixy Stix Assorted Changemaker - 85ct   |
 | HERBERT'S BEST SPOOKY GUMMI EYEZ 1.3 OZ           | HERBERT'S BEST | 7ct       | Spooky Gummy Eyes Halloween - 7ct       |
 | M&M'S YELLOW 10 LB                                | M&M'S          | 10lb      | Yellow M&M's Candy - 10lb               |

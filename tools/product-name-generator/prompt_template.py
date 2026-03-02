@@ -28,9 +28,15 @@ RULES:
 
 CHARACTER LIMIT: The result must fit within the character budget provided. If it exceeds the budget, shorten it.
 
+PACKAGING FORMATS — KEEP vs DROP:
+Some packaging formats distinguish different products and MUST be kept. Others are noise.
+- KEEP these (they differentiate products): Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Bulk
+- DROP these (they are redundant noise): "Theater Box" → "Box", "Laydown Bag" → "Bag", "Tubs", "Boxes", "Breaks"
+If a packaging term tells the customer what they're getting (e.g. a Changemaker vs a bag of Pixy Stix), keep it.
+
 SHORTENING STRATEGIES (apply in order):
-1. Drop redundant packaging words: "Peg Bag" → "Bag", "Theater Box" → "Box", "Laydown Bag" → "Bag"
-2. Remove filler words: "with", "and", "the", "flavored", "Breaks", "Bags", "Tubs", "Boxes"
+1. Drop redundant/noise packaging words (see DROP list above)
+2. Remove filler words: "with", "and", "the", "flavored"
 3. Abbreviate "Chocolate" to "Choc"
 4. Drop secondary flavors or modifiers (keep the primary one)
 5. Drop or abbreviate the brand name (last resort)
