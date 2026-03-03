@@ -3,6 +3,8 @@
 See SPEC.md for the full specification and examples.
 """
 
+import re
+
 # The model generates ONLY the product-name portion (before the dash).
 # The code appends " - {unit_size}" from the CSV data afterward.
 # char_budget = 56 - len(" - ") - len(unit_size)
@@ -30,8 +32,9 @@ CHARACTER LIMIT: The result must fit within the character budget provided. If it
 
 PACKAGING FORMATS — KEEP vs DROP:
 Some packaging formats distinguish different products and MUST be kept. Others are noise.
-- KEEP these (they differentiate products): Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Bulk
-- DROP these (they are redundant noise): "Theater Box" → "Box", "Laydown Bag" → "Bag", "Tubs", "Boxes", "Breaks"
+- KEEP in product name (include before the dash): Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
+- SYSTEM-HANDLED (do NOT include in your output): "Tubs" — the system appends it after the unit size automatically.
+- DROP these (redundant noise): "Laydown Bag" → "Bag", "Boxes", "Breaks"
 If a packaging term tells the customer what they're getting (e.g. a Changemaker vs a bag of Pixy Stix), keep it.
 
 SHORTENING STRATEGIES (apply in order):
@@ -55,11 +58,22 @@ def get_unit_size(row: dict) -> str:
     return (row.get(UNIT_SIZE_COLUMN) or "").strip()
 
 
-def compute_name_budget(unit_size: str, total_limit: int = 56) -> int:
+def has_tubs_suffix(row: dict) -> bool:
+    """Check if the source data indicates a 'Tubs' packaging format."""
+    title = (row.get("Title") or "").upper()
+    return bool(re.search(r"\bTUBS?\b", title))
+
+
+def compute_name_budget(
+    unit_size: str, total_limit: int = 56, tubs: bool = False,
+) -> int:
     """Return the max character count for the product-name portion."""
     if unit_size:
         # Account for " - " (3 chars) plus the unit size string
-        return total_limit - 3 - len(unit_size)
+        budget = total_limit - 3 - len(unit_size)
+        if tubs:
+            budget -= len(" Tubs")  # 5 chars for " Tubs" suffix
+        return budget
     return total_limit
 
 

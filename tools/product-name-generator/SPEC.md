@@ -7,13 +7,15 @@ All prompt templates and generation logic must follow these rules.
 
 ```
 [Product Name] - [Unit Size]
+[Product Name] - [Unit Size] Tubs      (when source data contains "Tubs")
 ```
 
 Everything before the dash is the product name. After the dash is the unit size
-pulled directly from the CSV data (never model-generated).
+pulled directly from the CSV data (never model-generated). When the source data
+contains "Tubs", the code appends " Tubs" after the unit size automatically.
 
 **Hard limit: 56 characters** (counting every character including spaces, dash,
-and unit size).
+unit size, and any suffix like " Tubs").
 
 ## Casing
 
@@ -57,7 +59,7 @@ The brand name is **NOT automatically placed at the beginning**. Apply these rul
 Some packaging formats distinguish different products and **must be kept**. Others
 are redundant noise and should be dropped or simplified.
 
-**KEEP** (these differentiate products — a customer needs to know):
+**KEEP in product name** (these differentiate products — include before the dash):
 - Changemaker
 - Peg Bag
 - Gift Bag
@@ -65,12 +67,17 @@ are redundant noise and should be dropped or simplified.
 - King Size
 - Snack Size
 - Variety Pack
+- Theater Box
 - Bulk
 
+**KEEP after unit size** (placed after the dash + unit size by the system):
+- Tubs — appears as `- 12ct Tubs`, NOT in the product name portion.
+  The code detects "Tubs" from the source data and appends it automatically.
+  The model must **not** include "Tubs" in its output.
+
 **DROP or simplify** (redundant noise):
-- "Theater Box" → "Box"
 - "Laydown Bag" → "Bag"
-- "Tubs", "Boxes", "Breaks" (generic, adds nothing)
+- "Boxes", "Breaks" (generic, adds nothing)
 
 **Rule of thumb:** if the packaging term tells the customer what they're getting
 (e.g. a Changemaker vs a bag of Pixy Stix are different products), keep it.

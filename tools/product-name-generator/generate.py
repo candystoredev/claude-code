@@ -37,6 +37,7 @@ from prompt_template import (
     build_user_prompt,
     compute_name_budget,
     get_unit_size,
+    has_tubs_suffix,
 )
 
 
@@ -98,7 +99,8 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
     " - {unit_size}" from the CSV so the model can never hallucinate it.
     """
     unit_size = get_unit_size(row)
-    name_budget = compute_name_budget(unit_size)
+    tubs = has_tubs_suffix(row)
+    name_budget = compute_name_budget(unit_size, tubs=tubs)
     user_text = build_user_prompt(row, char_budget=name_budget)
     messages = [{"role": "user", "content": user_text}]
 
@@ -133,9 +135,10 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
             }
         )
 
-    # Assemble final name: product name + unit size from data
+    # Assemble final name: product name + unit size (+ optional Tubs suffix)
     if unit_size:
-        return f"{name_part} - {unit_size}"
+        suffix = f"{unit_size} Tubs" if tubs else unit_size
+        return f"{name_part} - {suffix}"
     return name_part
 
 
