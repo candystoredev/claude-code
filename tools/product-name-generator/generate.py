@@ -139,7 +139,10 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
     # Enforce KEEP packaging formats: if the source title has one and the
     # model dropped it, append it to the product name deterministically.
     title = row.get("Title", "")
+    print(f"\n  [debug] title={title!r}")
+    print(f"  [debug] name_part={name_part!r}")
     missing_fmt = find_missing_packaging(title, name_part)
+    print(f"  [debug] missing_fmt={missing_fmt!r}")
     if missing_fmt:
         candidate = f"{name_part} {missing_fmt}"
         if len(candidate) <= name_budget:
