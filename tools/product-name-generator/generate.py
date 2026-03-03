@@ -52,14 +52,26 @@ def load_csv(filepath: str) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+_SKU_COLUMNS = ("Variant SKU", "SKU", "sku")
+
+
+def _get_sku(row: dict) -> str:
+    """Return the SKU value from whichever column exists."""
+    for col in _SKU_COLUMNS:
+        val = (row.get(col) or "").strip()
+        if val:
+            return val
+    return ""
+
+
 def load_completed_skus(filepath: str) -> set[str]:
-    """Return Variant SKUs that already have a generated name in the output."""
+    """Return SKUs that already have a generated name in the output."""
     completed: set[str] = set()
     if not os.path.exists(filepath):
         return completed
     with open(filepath, newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            sku = row.get("Variant SKU", "").strip()
+            sku = _get_sku(row)
             if sku and row.get("new_product_name", "").strip():
                 completed.add(sku)
     return completed
@@ -326,7 +338,7 @@ def main():
     total = len(rows)
 
     for i, row in enumerate(rows):
-        sku = (row.get("Variant SKU") or "").strip()
+        sku = _get_sku(row)
 
         if sku in completed_skus:
             skipped += 1
