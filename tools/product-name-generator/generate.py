@@ -291,6 +291,8 @@ def main():
 
     rows = load_csv(input_path)
     print(f"Loaded {len(rows)} products from {input_path}")
+    if rows:
+        print(f"[debug] CSV columns: {list(rows[0].keys())}")
 
     if args.limit:
         rows = rows[: args.limit]
