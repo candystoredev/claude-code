@@ -143,7 +143,10 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
     if missing_fmt:
         candidate = f"{name_part} {missing_fmt}"
         if len(candidate) <= name_budget:
+            print(f"  [fix] Added missing '{missing_fmt}': {name_part} → {candidate}")
             name_part = candidate
+        else:
+            print(f"  [fix] '{missing_fmt}' found in title but won't fit ({len(candidate)} > {name_budget})")
 
     # Assemble final name: product name + unit size (+ optional Tubs suffix)
     if unit_size:
