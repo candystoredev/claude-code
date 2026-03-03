@@ -95,9 +95,10 @@ When the product name portion exceeds its character budget, apply these in order
 ## Priority Order (what to preserve)
 
 1. Product type (what it IS — gummy, taffy, chocolate, etc.)
-2. Primary flavor / variety / distinguishing feature
-3. Brand name (only when it meets inclusion rules above)
-4. Quantity / case count
+2. Packaging format from the KEEP list (Changemaker, Peg Bag, Theater Box, etc.)
+3. Primary flavor / variety / distinguishing feature
+4. Brand name (only when it meets inclusion rules above)
+5. Quantity / case count
 
 ## What to Omit
 

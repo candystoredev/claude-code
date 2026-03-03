@@ -32,10 +32,11 @@ CHARACTER LIMIT: The result must fit within the character budget provided. If it
 
 PACKAGING FORMATS — KEEP vs DROP:
 Some packaging formats distinguish different products and MUST be kept. Others are noise.
-- KEEP in product name (include before the dash): Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
+- MUST KEEP in product name (ALWAYS include if present in source data): Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
+  Example: "PIXY STIX ASSORTED CHANGEMAKER 0.42 OZ" → "Pixy Stix Assorted Changemaker" (Changemaker MUST appear)
 - SYSTEM-HANDLED (do NOT include in your output): "Tubs" — the system appends it after the unit size automatically.
 - DROP these (redundant noise): "Laydown Bag" → "Bag", "Boxes", "Breaks"
-If a packaging term tells the customer what they're getting (e.g. a Changemaker vs a bag of Pixy Stix), keep it.
+If a packaging term is on the KEEP list and appears in the source data, it MUST appear in your output. Never drop a KEEP packaging format.
 
 SHORTENING STRATEGIES (apply in order):
 1. Drop redundant/noise packaging words (see DROP list above)
@@ -44,7 +45,7 @@ SHORTENING STRATEGIES (apply in order):
 4. Drop secondary flavors or modifiers (keep the primary one)
 5. Drop or abbreviate the brand name (last resort)
 
-PRIORITY ORDER: product type > primary flavor > brand name
+PRIORITY ORDER: product type > packaging format (Changemaker, Peg Bag, etc.) > primary flavor > brand name
 
 Return only the product name text. No dash, no unit size, no extra commentary."""
 
