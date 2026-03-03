@@ -36,6 +36,7 @@ from prompt_template import (
     SYSTEM_PROMPT,
     build_user_prompt,
     compute_name_budget,
+    find_missing_packaging,
     get_unit_size,
     has_tubs_suffix,
 )
@@ -134,6 +135,15 @@ def generate_product_name(client: anthropic.Anthropic, row: dict) -> str:
                 ),
             }
         )
+
+    # Enforce KEEP packaging formats: if the source title has one and the
+    # model dropped it, append it to the product name deterministically.
+    title = row.get("Title", "")
+    missing_fmt = find_missing_packaging(title, name_part)
+    if missing_fmt:
+        candidate = f"{name_part} {missing_fmt}"
+        if len(candidate) <= name_budget:
+            name_part = candidate
 
     # Assemble final name: product name + unit size (+ optional Tubs suffix)
     if unit_size:

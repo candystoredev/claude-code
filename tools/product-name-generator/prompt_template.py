@@ -59,6 +59,30 @@ def get_unit_size(row: dict) -> str:
     return (row.get(UNIT_SIZE_COLUMN) or "").strip()
 
 
+# Packaging formats that MUST appear in the product name if present in source
+KEEP_PACKAGING_FORMATS = [
+    "Changemaker",
+    "Peg Bag",
+    "Gift Bag",
+    "Fun Size",
+    "King Size",
+    "Snack Size",
+    "Variety Pack",
+    "Theater Box",
+    "Bulk",
+]
+
+
+def find_missing_packaging(title: str, name_part: str) -> str | None:
+    """Return the first KEEP packaging format found in *title* but missing from *name_part*."""
+    title_upper = title.upper()
+    name_upper = name_part.upper()
+    for fmt in KEEP_PACKAGING_FORMATS:
+        if fmt.upper() in title_upper and fmt.upper() not in name_upper:
+            return fmt
+    return None
+
+
 def has_tubs_suffix(row: dict) -> bool:
     """Check if the source data indicates a 'Tubs' packaging format."""
     title = (row.get("Title") or "").upper()
