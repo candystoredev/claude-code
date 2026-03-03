@@ -87,7 +87,7 @@ def init_output_csv(filepath: str, fieldnames: list[str]):
 def append_rows(filepath: str, fieldnames: list[str], rows: list[dict]):
     """Append rows to the output CSV."""
     with open(filepath, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         for row in rows:
             writer.writerow(row)
 
@@ -95,7 +95,7 @@ def append_rows(filepath: str, fieldnames: list[str], rows: list[dict]):
 def write_all_rows(filepath: str, fieldnames: list[str], rows: list[dict]):
     """Overwrite the output CSV with all rows (used after dedup rewrites)."""
     with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
@@ -311,7 +311,7 @@ def main():
         print(f"Limited to first {args.limit} products (test mode)")
 
     # --- Fieldnames ---
-    fieldnames = list(rows[0].keys()) if rows else []
+    fieldnames = [k for k in rows[0].keys() if k is not None] if rows else []
     if "new_product_name" not in fieldnames:
         fieldnames.append("new_product_name")
     if "generation_status" not in fieldnames:
