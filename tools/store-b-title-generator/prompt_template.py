@@ -36,8 +36,8 @@ accurately. The following deterministic rules define the Store B style:
    - If the brand IS the product (M&M's, Pixy Stix, Reese's, Skittles), include it
      naturally — it does not have to be first if another order reads more naturally
    - If the brand is a generic distributor or unknown to most consumers (e.g. Boston
-     America, Palmer, Herbert's Best), you may still include it but do not let it
-     dominate the title
+     America, Palmer, Herbert's Best, Nancy Adams), OMIT IT entirely — do not
+     include it in the Store B title at all
 
 6. SIZE DESCRIPTORS:
    - Words like "King Size", "Fun Size", "Snack Size", "Share Size", "Family Size"
@@ -67,7 +67,18 @@ accurately. The following deterministic rules define the Store B style:
     4. Drop secondary flavors or modifiers (keep the primary one)
     5. Drop or abbreviate the brand name (last resort)
 
-11. DIFFERENTIATION FROM STORE A:
+11. UNIT / COUNT SOURCING:
+    - CRITICAL: Use the same count or unit quantity that appears in the Store A
+      title. The Store A title's count (e.g. "6ct", "36ct") is the authoritative
+      source for how many items are in the pack.
+    - Do NOT substitute the net weight from the distributor title (e.g. "10 OZ")
+      in place of Store A's count (e.g. "6ct").
+    - If Store A says "6ct", Store B must end with "6 Count" (or equivalent).
+    - If Store A says "10lb", Store B must end with "10 LB".
+    - Only fall back to the distributor title's weight/count when Store A has no
+      count or unit information at all.
+
+12. DIFFERENTIATION FROM STORE A:
     - The reordering of attributes, expanded abbreviations, uppercase units, and
       added product type provide natural differentiation
     - Do not copy the Store A title structure or wording when possible
@@ -75,7 +86,7 @@ accurately. The following deterministic rules define the Store B style:
       adding the product type, changing separator style, or reordering attributes
     - The generated title must be less than 75% similar to Store A
 
-12. CONSTRAINTS:
+13. CONSTRAINTS:
     - Do not invent facts not present in the inputs
     - Do not add marketing language, adjectives, or SEO keywords not in the source
     - Do not remove brand, flavor, size, count, or pack information
@@ -105,7 +116,8 @@ RULES:
 - Use " - " (space-dash-space) to separate count/weight from the product name
 - Always include a product type word (Candy, Gum, Candy Bar, Gummy Candy, Hard Candy, Lollipop, Mints, etc.) if one is not already present
 - Lead with the brand name exactly as given — never abbreviate it
-- If the brand IS the product (M&M's, Skittles, Reese's), include naturally; if the brand is a generic distributor, do not let it dominate the title
+- If the brand IS the product (M&M's, Skittles, Reese's), include naturally
+- If the brand is a generic distributor or unknown to most consumers (e.g. Boston America, Palmer, Herbert's Best, Nancy Adams), OMIT IT entirely from the title
 - Place size descriptors (King Size, Fun Size, Snack Size, Share Size) right after the brand
 - Keep all flavors; use title case; join multiple flavors with "and"
 - KEEP these packaging formats if present: Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
@@ -115,6 +127,8 @@ RULES:
 - Do not invent facts not in the inputs
 - Do not add marketing fluff or SEO keywords
 - Do not remove any factual product attributes (brand, flavor, size, count, pack)
+- CRITICAL: Use the SAME count/unit quantity from the Store A title. If Store A says "6ct", end with "6 Count". If Store A says "10lb", end with "10 LB". Do NOT replace Store A's count with the distributor's net weight.
+- Only fall back to the distributor title's weight/count when Store A has no count or unit info at all
 - Keep titles concise (aim for under 120 characters)
 - The result MUST NOT be identical or nearly identical to the Store A title
 - SHORTENING (if too long): drop noise packaging → remove filler words (with, and, the, flavored) → abbreviate Chocolate to Choc → drop secondary flavors → abbreviate brand (last resort)

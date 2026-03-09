@@ -18,7 +18,7 @@ CASING: Always output in Title Case. Input is often ALL CAPS — convert it. Use
 BRAND NAME RULES:
 - Only include the brand/vendor name when it helps describe WHAT the product is.
 - If the brand IS the product (Pixy Stix, M&M's, Reese's, Skittles, etc.), include it where it reads naturally.
-- If the brand is a generic distributor or unknown to most consumers (e.g. Boston America, Palmer, Herbert's Best), OMIT IT entirely.
+- If the brand is a generic distributor or unknown to most consumers (e.g. Boston America, Palmer, Herbert's Best, Nancy Adams), OMIT IT entirely.
 - When included, the brand does NOT have to come first. Put descriptors like color or flavor before the brand if that reads more naturally (e.g. "Yellow M&M's Candy" not "M&M's Yellow Candy").
 
 RULES:

@@ -43,6 +43,7 @@ The brand name is **NOT automatically placed at the beginning**. Apply these rul
    describe the product and isn't a household name, **omit it entirely**.
    - "Boston America" is a distributor — omit.
    - "Palmer" — not needed to describe "Choco Fluff Pumpkins".
+   - "Nancy Adams" — generic distributor, omit.
    - Example: `Gummy Rudolph Strawberry - 9ct` (no "Boston America")
    - Example: `Choco Fluff Pumpkins - 9lb` (no "Palmer")
 
