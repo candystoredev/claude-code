@@ -35,9 +35,11 @@ accurately. The following deterministic rules define the Store B style:
    - Do not add trademark symbols
    - If the brand IS the product (M&M's, Pixy Stix, Reese's, Skittles), include it
      naturally — it does not have to be first if another order reads more naturally
-   - If the brand is a generic distributor or unknown to most consumers (e.g. Boston
-     America, Palmer, Herbert's Best, Nancy Adams, Clever Candy), OMIT IT entirely — do not
-     include it in the Store B title at all
+   - OMIT GENERIC DISTRIBUTOR BRANDS entirely — these must NEVER appear anywhere
+     in the Store B title: Boston America, Palmer, Herbert's Best, Nancy Adams,
+     Clever Candy, Nassau Candy
+   - If the distributor title starts with one of these brands, strip it and build
+     the Store B title from the remaining product description only
 
 6. SIZE DESCRIPTORS:
    - Words like "King Size", "Fun Size", "Snack Size", "Share Size", "Family Size"
@@ -138,7 +140,7 @@ RULES:
 - Always include a product type word (Candy, Gum, Candy Bar, Gummy Candy, Hard Candy, Lollipop, Mints, etc.) if one is not already present
 - Lead with the brand name exactly as given — never abbreviate it
 - If the brand IS the product (M&M's, Skittles, Reese's), include naturally
-- If the brand is a generic distributor or unknown to most consumers (e.g. Boston America, Palmer, Herbert's Best, Nancy Adams, Clever Candy), OMIT IT entirely from the title
+- OMIT GENERIC DISTRIBUTOR BRANDS — these must NEVER appear anywhere in the Store B title: Boston America, Palmer, Herbert's Best, Nancy Adams, Clever Candy, Nassau Candy. Strip the brand and build the title from the remaining product description only.
 - Place size descriptors (King Size, Fun Size, Snack Size, Share Size) right after the brand
 - Keep all flavors; use title case; join multiple flavors with "and"
 - KEEP these packaging formats if present: Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
