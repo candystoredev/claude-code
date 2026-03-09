@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Candy product description generator using Claude API with image analysis.
+Candy product title tag generator using Claude API with image analysis.
 
 Usage:
     # Test on first 50 products
@@ -44,7 +44,7 @@ def load_completed_skus(filepath: str) -> set[str]:
         reader = csv.DictReader(f)
         for row in reader:
             sku = row.get("Variant SKU", "").strip()
-            if sku and row.get("new_description", "").strip():
+            if sku and row.get("new_title_tag", "").strip():
                 completed.add(sku)
     return completed
 
@@ -61,8 +61,8 @@ def get_image_media_type(url: str) -> str:
     return "image/jpeg"
 
 
-def generate_description(client: anthropic.Anthropic, row: dict) -> str:
-    """Call Claude API with image + text prompt for a single product."""
+def generate_title_tag(client: anthropic.Anthropic, row: dict) -> str:
+    """Call Claude API with image + text prompt for a single product title tag."""
     user_text = build_user_prompt(row)
     image_url = (row.get("Image Src") or "").strip()
 
@@ -81,14 +81,36 @@ def generate_description(client: anthropic.Anthropic, row: dict) -> str:
 
     content.append({"type": "text", "text": user_text})
 
-    message = client.messages.create(
-        model=config.API_MODEL,
-        max_tokens=config.API_MAX_TOKENS,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
-    )
+    messages = [{"role": "user", "content": content}]
 
-    return message.content[0].text.strip()
+    max_chars = 56
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        message = client.messages.create(
+            model=config.API_MODEL,
+            max_tokens=config.API_MAX_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+        )
+
+        result = message.content[0].text.strip()
+
+        if len(result) <= max_chars:
+            return result
+
+        # Too long — ask the model to shorten further with the exact count
+        print(f"({len(result)} chars, retrying)", end=" ", flush=True)
+        messages.append({"role": "assistant", "content": result})
+        messages.append(
+            {
+                "role": "user",
+                "content": f"That is {len(result)} characters. It MUST be {max_chars} or fewer. Shorten it further.",
+            }
+        )
+
+    # After max retries, return whatever we got
+    return result
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
@@ -108,9 +130,9 @@ def append_rows(filepath: str, fieldnames: list[str], rows: list[dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate candy product descriptions with Claude API")
+    parser = argparse.ArgumentParser(description="Generate candy product title tags with Claude API")
     parser.add_argument("--input", default=None, help="Input CSV path (default: input/products.csv)")
-    parser.add_argument("--output", default=None, help="Output CSV path (default: output/products_with_descriptions.csv)")
+    parser.add_argument("--output", default=None, help="Output CSV path (default: output/products_with_title_tags.csv)")
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N products (for testing)")
     parser.add_argument("--resume", action="store_true", help="Resume from previous run, skipping already-processed SKUs")
     args = parser.parse_args()
@@ -149,10 +171,10 @@ def main():
         rows = rows[: args.limit]
         print(f"Limited to first {args.limit} products (test mode)")
 
-    # Determine output fieldnames
+    # Determine output fieldnames (filter None keys from trailing CSV commas)
     fieldnames = [k for k in rows[0].keys() if k is not None] if rows else []
-    if "new_description" not in fieldnames:
-        fieldnames.append("new_description")
+    if "new_title_tag" not in fieldnames:
+        fieldnames.append("new_title_tag")
     if "generation_status" not in fieldnames:
         fieldnames.append("generation_status")
 
@@ -185,18 +207,18 @@ def main():
         print(f"[{i + 1}/{total}] Processing: {title[:60]}...", end=" ", flush=True)
 
         try:
-            description = generate_description(client, row)
-            row["new_description"] = description
+            title_tag = generate_title_tag(client, row)
+            row["new_title_tag"] = title_tag
             row["generation_status"] = "success"
             processed += 1
             print("OK")
         except anthropic.APIError as e:
-            row["new_description"] = ""
+            row["new_title_tag"] = ""
             row["generation_status"] = f"error: {e}"
             errors += 1
             print(f"API ERROR: {e}")
         except Exception as e:
-            row["new_description"] = ""
+            row["new_title_tag"] = ""
             row["generation_status"] = f"error: {e}"
             errors += 1
             print(f"ERROR: {e}")
