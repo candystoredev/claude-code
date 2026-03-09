@@ -22,6 +22,7 @@ Usage:
 import argparse
 import csv
 import os
+import re
 import sys
 import time
 
@@ -29,6 +30,50 @@ import anthropic
 
 import config
 from prompt_template import SYSTEM_PROMPT, build_user_prompt
+
+
+# ---------------------------------------------------------------------------
+# Similarity helpers
+# ---------------------------------------------------------------------------
+
+def _tokenize(text: str) -> list[str]:
+    """Lower-case and split into alphanumeric tokens."""
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def similarity_ratio(a: str, b: str) -> float:
+    """Return a 0-1 similarity score between two titles.
+
+    Uses Jaccard similarity on word tokens. 1.0 = identical, 0.0 = no overlap.
+    """
+    tokens_a = set(_tokenize(a))
+    tokens_b = set(_tokenize(b))
+    if not tokens_a and not tokens_b:
+        return 1.0
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+
+
+# Maximum allowed similarity to Store A (0.0–1.0).  Titles scoring above
+# this threshold are rejected and retried.
+MAX_SIMILARITY = 0.75
+
+
+def _uppercase_units(title: str) -> str:
+    """Uppercase unit suffixes like lb, ct, oz, pk, pc, pcs at the end of
+    numeric+unit tokens (e.g. '10lb' → '10LB', '18ct' → '18CT') and also
+    standalone patterns like '2.4 oz' → '2.4 OZ'."""
+    # Pattern: digit(s) optionally with decimals, optional space, then unit
+    def _upper(m: re.Match) -> str:
+        return m.group(1) + m.group(2).upper()
+
+    return re.sub(
+        r"(\d+\.?\d*\s?)(lb|oz|ct|pk|pcs?|kg|g|ml)\b",
+        _upper,
+        title,
+        flags=re.IGNORECASE,
+    )
 
 
 def load_input_csv(filepath: str) -> list[dict]:
@@ -73,18 +118,24 @@ def generate_store_b_title(client: anthropic.Anthropic, row: dict) -> str:
 
         result = message.content[0].text.strip()
 
-        # Validate: must not be identical to Store A title
-        if result.lower() != store_a_title.lower():
+        # Post-process: uppercase unit suffixes (e.g. 10lb → 10LB)
+        result = _uppercase_units(result)
+
+        # Validate: must be sufficiently different from Store A title
+        sim = similarity_ratio(result, store_a_title)
+        if sim <= MAX_SIMILARITY:
             return result
 
         # Too similar — ask the model to differentiate more
-        print("(too similar to Store A, retrying)", end=" ", flush=True)
+        pct = int(sim * 100)
+        print(f"({pct}% similar to Store A, retrying)", end=" ", flush=True)
         messages.append({"role": "assistant", "content": result})
         messages.append(
             {
                 "role": "user",
                 "content": (
-                    "That title is identical to the Store A title. "
+                    f"That title is {pct}% similar to the Store A title — "
+                    f"it must be under {int(MAX_SIMILARITY * 100)}% similar. "
                     "Rewrite it following the Store B convention so the attribute order, "
                     "separators, and phrasing are clearly different from Store A. "
                     "Return only the title text."
@@ -92,7 +143,8 @@ def generate_store_b_title(client: anthropic.Anthropic, row: dict) -> str:
             }
         )
 
-    return result
+    # Final attempt — still apply uppercase units
+    return _uppercase_units(result)
 
 
 def init_output_csv(filepath: str, fieldnames: list[str]):
