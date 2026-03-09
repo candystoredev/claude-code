@@ -78,15 +78,36 @@ accurately. The following deterministic rules define the Store B style:
     - Only fall back to the distributor title's weight/count when Store A has no
       count or unit information at all.
 
-12. DIFFERENTIATION FROM STORE A:
-    - The reordering of attributes, expanded abbreviations, uppercase units, and
-      added product type provide natural differentiation
-    - Do not copy the Store A title structure or wording when possible
-    - If the Store A title already follows Store B conventions closely, adjust by
-      adding the product type, changing separator style, or reordering attributes
+12. ACCURACY — NEVER DROP IDENTIFYING INFORMATION:
+    - Every factual identifier from the distributor title MUST appear in Store B's
+      title: decade numbers (1950's, 1960's), model numbers, flavor names, brand
+      names (unless generic-distributor rule applies), distinguishing descriptors
+    - If the distributor title says "1960'S DECADE", the Store B title MUST contain
+      "1960's" — dropping it makes the title describe a completely different product
+    - Cross-check: after generating, verify every key fact from the distributor
+      title is present in your output
+
+13. DIFFERENTIATION FROM STORE A:
+    - Changing ONLY the unit format (ct→Count, lb→LB) is NOT sufficient differentiation
+    - You MUST also change the word order, phrasing, or add a product-type word
+    - Strategies (use at least one beyond unit formatting):
+      a) REORDER attributes: move brand to end, or flavor before brand
+      b) ADD a product-type word Store A omits (e.g. "Candy", "Snack", "Treats")
+      c) EXPAND or REPHRASE descriptors using info from the distributor title
+         (e.g. "Nostalgia Boxes" → "Decade Candy Box", "Raisins" → "Chocolate Raisins Candy")
+      d) Use different separator structure (e.g. combine count and weight differently)
+    - Examples of GOOD differentiation:
+      Store A: "Marich Dark Chocolate Raisins - 10lb"
+      Store B: "Marich Dark Chocolate Covered Raisins Candy - 10 LB"
+      (added "Covered" from product knowledge + "Candy" product type + reformat unit)
+
+      Store A: "1950's Candy Nostalgia Boxes - 6ct"
+      Store B: "1950's Decade Candy Box - 6 Count"
+      (used distributor phrasing "Decade" + singular "Box" + spelled out Count)
+
     - The generated title must be less than 75% similar to Store A
 
-13. CONSTRAINTS:
+14. CONSTRAINTS:
     - Do not invent facts not present in the inputs
     - Do not add marketing language, adjectives, or SEO keywords not in the source
     - Do not remove brand, flavor, size, count, or pack information
@@ -123,10 +144,15 @@ RULES:
 - KEEP these packaging formats if present: Changemaker, Peg Bag, Gift Bag, Fun Size, King Size, Snack Size, Variety Pack, Theater Box, Bulk
 - SIMPLIFY: "Laydown Bag" → "Bag". DROP noise: "Boxes", "Breaks"
 - Use title case throughout (except unit suffixes which are UPPERCASE); no trailing periods
-- Do not copy Store A's title structure or wording when possible
+- ACCURACY: NEVER drop identifying information from the distributor title — decades (1950's, 1960's), model numbers, flavor names, and distinguishing descriptors MUST all appear in the Store B title. Cross-check your output against the distributor title before returning.
+- DIFFERENTIATION: Changing ONLY the unit format (ct→Count, lb→LB) is NOT enough. You MUST also use at least one of: reorder attributes, add a product-type word, expand/rephrase descriptors using the distributor title, or restructure the separator layout.
+  Examples:
+  Store A: "Marich Dark Chocolate Raisins - 10lb" → Store B: "Marich Dark Chocolate Covered Raisins Candy - 10 LB"
+  Store A: "1950's Candy Nostalgia Boxes - 6ct" → Store B: "1950's Decade Candy Box - 6 Count"
+  Store A: "1960's Candy Nostalgia Boxes - 6ct" → Store B: "1960's Decade Candy Box - 6 Count"
 - Do not invent facts not in the inputs
 - Do not add marketing fluff or SEO keywords
-- Do not remove any factual product attributes (brand, flavor, size, count, pack)
+- Do not remove any factual product attributes (brand, flavor, size, count, pack, decade, identifying numbers)
 - CRITICAL: Use the SAME count/unit quantity from the Store A title. If Store A says "6ct", end with "6 Count". If Store A says "10lb", end with "10 LB". Do NOT replace Store A's count with the distributor's net weight.
 - Only fall back to the distributor title's weight/count when Store A has no count or unit info at all
 - Keep titles concise (aim for under 120 characters)

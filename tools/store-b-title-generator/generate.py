@@ -57,7 +57,7 @@ def similarity_ratio(a: str, b: str) -> float:
 
 # Maximum allowed similarity to Store A (0.0–1.0).  Titles scoring above
 # this threshold are rejected and retried.
-MAX_SIMILARITY = 0.75
+MAX_SIMILARITY = 0.65
 
 
 def _uppercase_units(title: str) -> str:
@@ -136,8 +136,11 @@ def generate_store_b_title(client: anthropic.Anthropic, row: dict) -> str:
                 "content": (
                     f"That title is {pct}% similar to the Store A title — "
                     f"it must be under {int(MAX_SIMILARITY * 100)}% similar. "
-                    "Rewrite it following the Store B convention so the attribute order, "
-                    "separators, and phrasing are clearly different from Store A. "
+                    "Rewrite it so it is clearly different from Store A. Try: "
+                    "reorder attributes, add a product-type word (Candy, Treats, etc.), "
+                    "expand descriptors using the distributor title, or rephrase. "
+                    "Changing only the unit format (ct→Count) is NOT enough. "
+                    "IMPORTANT: Do NOT drop any identifying info (decades, flavors, brand). "
                     "Return only the title text."
                 ),
             }
