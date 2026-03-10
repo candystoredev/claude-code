@@ -26,6 +26,26 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB upload limit
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
+# Cloud storage pre-configuration (optional — set in Railway env vars)
+STORAGE_TYPE = os.environ.get("STORAGE_TYPE", "r2")  # "r2" or "s3"
+
+R2_ACCOUNT_ID      = os.environ.get("R2_ACCOUNT_ID", "")
+R2_BUCKET_NAME     = os.environ.get("R2_BUCKET_NAME", "")
+R2_ACCESS_KEY_ID   = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_KEY      = os.environ.get("R2_SECRET_KEY", "")
+R2_PUBLIC_BASE_URL = os.environ.get("R2_PUBLIC_BASE_URL", "")
+R2_FOLDER_PREFIX   = os.environ.get("R2_FOLDER_PREFIX", "")
+
+S3_BUCKET_NAME     = os.environ.get("S3_BUCKET_NAME", "")
+S3_ACCESS_KEY_ID   = os.environ.get("S3_ACCESS_KEY_ID", "")
+S3_SECRET_KEY      = os.environ.get("S3_SECRET_KEY", "")
+S3_PUBLIC_BASE_URL = os.environ.get("S3_PUBLIC_BASE_URL", "")
+S3_FOLDER_PREFIX   = os.environ.get("S3_FOLDER_PREFIX", "")
+S3_REGION          = os.environ.get("S3_REGION", "us-east-1")
+
+R2_PRECONFIGURED = all([R2_ACCOUNT_ID, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, R2_SECRET_KEY, R2_PUBLIC_BASE_URL])
+S3_PRECONFIGURED = all([S3_BUCKET_NAME, S3_ACCESS_KEY_ID, S3_SECRET_KEY, S3_PUBLIC_BASE_URL])
+
 # In-memory job store: job_id -> {"rows": [...], "events": [...], "done": bool, "output_bytes": bytes|None}
 _jobs: dict = {}
 _jobs_lock = threading.Lock()
@@ -52,7 +72,17 @@ def _is_authenticated() -> bool:
 def index():
     if not _is_authenticated():
         return render_template("login.html")
-    return render_template("index.html")
+    return render_template("index.html",
+        storage_type=STORAGE_TYPE,
+        r2=dict(account_id=R2_ACCOUNT_ID, bucket_name=R2_BUCKET_NAME,
+                access_key_id=R2_ACCESS_KEY_ID, secret_key=R2_SECRET_KEY,
+                public_base_url=R2_PUBLIC_BASE_URL, folder_prefix=R2_FOLDER_PREFIX,
+                preconfigured=R2_PRECONFIGURED),
+        s3=dict(bucket_name=S3_BUCKET_NAME, access_key_id=S3_ACCESS_KEY_ID,
+                secret_key=S3_SECRET_KEY, public_base_url=S3_PUBLIC_BASE_URL,
+                folder_prefix=S3_FOLDER_PREFIX, region=S3_REGION,
+                preconfigured=S3_PRECONFIGURED),
+    )
 
 
 @app.route("/login", methods=["POST"])
@@ -77,15 +107,24 @@ def process():
     if not _is_authenticated():
         return jsonify({"error": "Unauthorized"}), 401
 
-    # --- Parse form fields ---
-    storage_type = request.form.get("storage_type", "r2")
-    access_key_id = request.form.get("access_key_id", "").strip()
-    secret_access_key = request.form.get("secret_access_key", "").strip()
-    bucket_name = request.form.get("bucket_name", "").strip()
-    public_base_url = request.form.get("public_base_url", "").strip().rstrip("/")
-    folder_prefix = request.form.get("folder_prefix", "").strip().strip("/")
-    account_id = request.form.get("account_id", "").strip()   # R2 only
-    aws_region = request.form.get("aws_region", "us-east-1").strip()  # S3 only
+    # --- Parse form fields (fall back to env vars when pre-configured) ---
+    storage_type = request.form.get("storage_type", "") or STORAGE_TYPE
+    if storage_type == "r2":
+        access_key_id     = request.form.get("access_key_id", "").strip()     or R2_ACCESS_KEY_ID
+        secret_access_key = request.form.get("secret_access_key", "").strip() or R2_SECRET_KEY
+        bucket_name       = request.form.get("bucket_name", "").strip()       or R2_BUCKET_NAME
+        public_base_url   = (request.form.get("public_base_url", "").strip()  or R2_PUBLIC_BASE_URL).rstrip("/")
+        folder_prefix     = (request.form.get("folder_prefix", "").strip()    or R2_FOLDER_PREFIX).strip("/")
+        account_id        = request.form.get("account_id", "").strip()        or R2_ACCOUNT_ID
+        aws_region        = "auto"
+    else:
+        access_key_id     = request.form.get("access_key_id", "").strip()     or S3_ACCESS_KEY_ID
+        secret_access_key = request.form.get("secret_access_key", "").strip() or S3_SECRET_KEY
+        bucket_name       = request.form.get("bucket_name", "").strip()       or S3_BUCKET_NAME
+        public_base_url   = (request.form.get("public_base_url", "").strip()  or S3_PUBLIC_BASE_URL).rstrip("/")
+        folder_prefix     = (request.form.get("folder_prefix", "").strip()    or S3_FOLDER_PREFIX).strip("/")
+        account_id        = ""
+        aws_region        = request.form.get("aws_region", "").strip()        or S3_REGION
 
     if not all([access_key_id, secret_access_key, bucket_name, public_base_url]):
         return jsonify({"error": "Missing required fields: access_key_id, secret_access_key, bucket_name, public_base_url"}), 400
