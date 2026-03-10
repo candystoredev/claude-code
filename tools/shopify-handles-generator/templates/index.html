@@ -233,7 +233,7 @@
         <!-- Error display -->
         <div class="error hidden" id="error-msg"></div>
 
-        <div style="text-align:center; margin-top:2rem; font-size:0.75rem; color:#aaa;">v2.1.0 — 2026-03-10</div>
+        <div style="text-align:center; margin-top:2rem; font-size:0.75rem; color:#aaa;">v2.2.0 — 2026-03-10</div>
     </div>
 
     <script>
@@ -323,7 +323,7 @@
             document.getElementById('upload-card').classList.add('hidden');
             document.getElementById('progress-card').classList.remove('hidden');
 
-            const batchSize = 50;
+            const batchSize = 20;
             const totalBatches = Math.ceil(productNames.length / batchSize);
             results = [];
             let allHandles = [];
@@ -335,14 +335,17 @@
                         `Processing batch ${batchNum} of ${totalBatches} (${Math.min(i + batchSize, productNames.length)} of ${productNames.length} products)...`;
 
                     const batch = productNames.slice(i, i + batchSize);
+                    // Only send last 100 handles for dedup context (keeps request small)
+                    const recentHandles = allHandles.slice(-100);
                     const { resp, data } = await fetchWithRetry('/generate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ product_names: batch, existing_handles: allHandles }),
+                        body: JSON.stringify({ product_names: batch, existing_handles: recentHandles }),
                     });
 
                     if (!resp.ok) {
-                        showError(data.error || 'Generation failed');
+                        const detail = data.error || data.message || JSON.stringify(data);
+                        showError('Batch ' + batchNum + ' failed: ' + detail);
                         document.getElementById('progress-card').classList.add('hidden');
                         document.getElementById('upload-card').classList.remove('hidden');
                         return;

@@ -58,9 +58,9 @@ def generate_handles():
             user_message += f"{j}. {name}\n"
 
         # Only send the most recent handles to avoid prompt bloat/timeouts
-        # on large files. 200 recent handles is enough for dedup context.
+        # on large files. 100 recent handles is enough for dedup context.
         if existing_handles:
-            recent_handles = existing_handles[-200:]
+            recent_handles = existing_handles[-100:]
             user_message += (
                 "\n\nAlready-used handles (must not duplicate): "
                 + ", ".join(recent_handles)

@@ -11,4 +11,4 @@ cmds = [
 ]
 
 [start]
-cmd = "doppler run -- gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120"
+cmd = "doppler run -- gunicorn app:app --bind 0.0.0.0:$PORT --timeout 300 --graceful-timeout 300"
