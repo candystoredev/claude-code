@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Batch Renamer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.02em; }
+    header a { color: #aab4e8; font-size: 0.8rem; text-decoration: none; }
+    header a:hover { color: #fff; }
+    .container { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 1.25rem; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 0.35rem;
+    }
+    .form-group .help {
+      font-size: 0.78rem;
+      color: #888;
+      margin-bottom: 0.35rem;
+    }
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { outline: none; border-color: #5c6ac4; }
+
+    /* Storage type toggle */
+    .radio-group { display: flex; gap: 0.75rem; }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .radio-group input[type="radio"] { accent-color: #5c6ac4; }
+    .radio-group label:has(input:checked) {
+      border-color: #5c6ac4;
+      background: #f0f2ff;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #c8cfe8;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .drop-zone.dragover { border-color: #5c6ac4; background: #f0f2ff; }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .drop-zone p { font-size: 0.88rem; color: #666; }
+    .drop-zone .filename { font-weight: 600; color: #5c6ac4; margin-top: 0.4rem; font-size: 0.88rem; }
+
+    .btn {
+      background: #5c6ac4;
+      color: #fff;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #4a58b0; }
+    .btn:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-secondary {
+      background: #fff;
+      color: #5c6ac4;
+      border: 1px solid #5c6ac4;
+    }
+    .btn-secondary:hover { background: #f0f2ff; }
+
+    /* Progress */
+    .progress-bar-wrap {
+      background: #e8eaf0;
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 0.6rem;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #5c6ac4;
+      border-radius: 999px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-label { font-size: 0.85rem; color: #555; margin-bottom: 1rem; }
+
+    /* Log */
+    .log {
+      background: #f7f8fc;
+      border: 1px solid #e2e6f0;
+      border-radius: 6px;
+      padding: 0.75rem;
+      max-height: 260px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+    .log-entry { padding: 0.15rem 0; border-bottom: 1px solid #eef0f7; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry.success { color: #2e7d32; }
+    .log-entry.error { color: #c62828; }
+
+    /* Summary chips */
+    .summary { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
+    .chip {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+    .chip-success { background: #e8f5e9; color: #2e7d32; }
+    .chip-error { background: #ffebee; color: #c62828; }
+
+    .alert { padding: 0.85rem 1rem; border-radius: 6px; font-size: 0.88rem; margin-bottom: 1rem; }
+    .alert-error { background: #ffebee; color: #c62828; }
+
+    /* Hidden sections */
+    #section-progress, #section-results { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Image Batch Renamer</h1>
+  <a href="/logout">Sign out</a>
+</header>
+
+<div class="container">
+
+  <!-- ── SETUP SECTION ── -->
+  <div id="section-setup">
+    <div class="card">
+      <h2>1. Upload your image list</h2>
+      <p class="form-group help" style="margin-bottom:1rem;">
+        Upload a <strong>CSV or Excel</strong> file with two columns:
+        <code>original_url</code> and <code>new_filename</code>.
+        The <code>new_filename</code> column is optional — if omitted, the original filename is preserved.
+      </p>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+        <div class="icon">📄</div>
+        <p>Drag &amp; drop your CSV or Excel file here, or click to browse</p>
+        <div class="filename" id="fileLabel"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Configure cloud storage</h2>
+
+      <div class="form-group">
+        <label>Storage provider</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="storage_type" value="r2" checked onchange="toggleStorage(this.value)">
+            Cloudflare R2
+          </label>
+          <label>
+            <input type="radio" name="storage_type" value="s3" onchange="toggleStorage(this.value)">
+            AWS S3
+          </label>
+        </div>
+      </div>
+
+      <!-- R2 fields -->
+      <div id="r2-fields">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="account_id">Account ID</label>
+            <div class="help">Found in R2 → Overview in your Cloudflare dashboard</div>
+            <input type="text" id="account_id" placeholder="abc123def456...">
+          </div>
+          <div class="form-group">
+            <label for="bucket_name_r2">Bucket name</label>
+            <input type="text" id="bucket_name_r2" placeholder="my-images">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="access_key_id_r2">Access Key ID</label>
+            <input type="text" id="access_key_id_r2" placeholder="R2 API token key ID">
+          </div>
+          <div class="form-group">
+            <label for="secret_access_key_r2">Secret Access Key</label>
+            <input type="password" id="secret_access_key_r2" placeholder="R2 API token secret">
+          </div>
+        </div>
+      </div>
+
+      <!-- S3 fields -->
+      <div id="s3-fields" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="aws_region">Region</label>
+            <input type="text" id="aws_region" placeholder="us-east-1">
+          </div>
+          <div class="form-group">
+            <label for="bucket_name_s3">Bucket name</label>
+            <input type="text" id="bucket_name_s3" placeholder="my-images">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="access_key_id_s3">Access Key ID</label>
+            <input type="text" id="access_key_id_s3" placeholder="AKIAIOSFODNN7EXAMPLE">
+          </div>
+          <div class="form-group">
+            <label for="secret_access_key_s3">Secret Access Key</label>
+            <input type="password" id="secret_access_key_s3" placeholder="Secret access key">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="public_base_url">Public base URL</label>
+          <div class="help">The root URL where your bucket is publicly accessible</div>
+          <input type="text" id="public_base_url" placeholder="https://pub-xxx.r2.dev">
+        </div>
+        <div class="form-group">
+          <label for="folder_prefix">Folder prefix <span style="font-weight:400;color:#888;">(optional)</span></label>
+          <div class="help">Subfolder within the bucket, e.g. <code>products/2024</code></div>
+          <input type="text" id="folder_prefix" placeholder="products">
+        </div>
+      </div>
+    </div>
+
+    <div id="setup-error" class="alert alert-error" style="display:none;"></div>
+
+    <button class="btn" id="startBtn" onclick="startProcessing()">Start Processing</button>
+  </div>
+
+  <!-- ── PROGRESS SECTION ── -->
+  <div id="section-progress">
+    <div class="card">
+      <h2>Processing images…</h2>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-label" id="progressLabel">0 / 0</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <!-- ── RESULTS SECTION ── -->
+  <div id="section-results">
+    <div class="card">
+      <h2>Done</h2>
+      <div class="summary" id="summary"></div>
+      <p style="font-size:0.85rem;color:#555;margin-bottom:1.25rem;">
+        The downloaded Excel file contains four columns: <code>original_url</code>, <code>new_filename</code>,
+        <code>new_url</code>, and <code>status</code>. Use the <code>new_url</code> column as the
+        <strong>Image Src</strong> in your Shopify import.
+      </p>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+        <button class="btn" id="downloadBtn" onclick="downloadResults()">Download Results (Excel)</button>
+        <button class="btn btn-secondary" onclick="resetApp()">Process another batch</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentJobId = null;
+  let currentStorageType = 'r2';
+
+  function toggleStorage(type) {
+    currentStorageType = type;
+    document.getElementById('r2-fields').style.display = type === 'r2' ? '' : 'none';
+    document.getElementById('s3-fields').style.display = type === 's3' ? '' : 'none';
+  }
+
+  // Drag-and-drop
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const fileLabel = document.getElementById('fileLabel');
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      fileLabel.textContent = e.dataTransfer.files[0].name;
+    }
+  });
+  fileInput.addEventListener('change', () => {
+    fileLabel.textContent = fileInput.files[0]?.name || '';
+  });
+
+  function getField(id) {
+    return document.getElementById(id)?.value?.trim() || '';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('setup-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function clearError() {
+    const el = document.getElementById('setup-error');
+    el.style.display = 'none';
+  }
+
+  async function startProcessing() {
+    clearError();
+
+    if (!fileInput.files.length) { showError('Please select a file to upload.'); return; }
+
+    const storageType = currentStorageType;
+    const publicBaseUrl = getField('public_base_url');
+    const folderPrefix = getField('folder_prefix');
+
+    let accessKeyId, secretAccessKey, bucketName, accountId, awsRegion;
+
+    if (storageType === 'r2') {
+      accountId = getField('account_id');
+      bucketName = getField('bucket_name_r2');
+      accessKeyId = getField('access_key_id_r2');
+      secretAccessKey = getField('secret_access_key_r2');
+      if (!accountId) { showError('Account ID is required for Cloudflare R2.'); return; }
+    } else {
+      awsRegion = getField('aws_region') || 'us-east-1';
+      bucketName = getField('bucket_name_s3');
+      accessKeyId = getField('access_key_id_s3');
+      secretAccessKey = getField('secret_access_key_s3');
+    }
+
+    if (!accessKeyId || !secretAccessKey) { showError('Access Key ID and Secret Access Key are required.'); return; }
+    if (!bucketName) { showError('Bucket name is required.'); return; }
+    if (!publicBaseUrl) { showError('Public base URL is required.'); return; }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('storage_type', storageType);
+    formData.append('access_key_id', accessKeyId);
+    formData.append('secret_access_key', secretAccessKey);
+    formData.append('bucket_name', bucketName);
+    formData.append('public_base_url', publicBaseUrl);
+    formData.append('folder_prefix', folderPrefix);
+    if (storageType === 'r2') {
+      formData.append('account_id', accountId);
+    } else {
+      formData.append('aws_region', awsRegion || 'us-east-1');
+    }
+
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+
+    let resp, data;
+    try {
+      resp = await fetch('/process', { method: 'POST', body: formData });
+      data = await resp.json();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Start Processing';
+      showError('Network error: ' + e.message);
+      return;
+    }
+
+    if (!resp.ok) {
+      btn.disabled = false;
+      btn.textContent = 'Start Processing';
+      showError(data.error || 'Server error');
+      return;
+    }
+
+    currentJobId = data.job_id;
+    const total = data.total;
+
+    // Switch to progress view
+    document.getElementById('section-setup').style.display = 'none';
+    document.getElementById('section-progress').style.display = '';
+    updateProgress(0, total);
+
+    // Open SSE stream
+    const evtSource = new EventSource('/stream/' + currentJobId);
+    let doneCount = 0;
+
+    evtSource.onmessage = (e) => {
+      const event = JSON.parse(e.data);
+
+      if (event.type === 'done') {
+        evtSource.close();
+        showResults(event.success_count, event.error_count, total);
+        return;
+      }
+
+      doneCount++;
+      updateProgress(doneCount, total);
+      appendLog(event);
+    };
+
+    evtSource.onerror = () => {
+      evtSource.close();
+      // If we've received a done event, ignore the error (stream closed normally)
+    };
+  }
+
+  function updateProgress(done, total) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = done + ' / ' + total + ' images';
+  }
+
+  function appendLog(event) {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + event.status;
+    const icon = event.status === 'success' ? '✓' : '✗';
+    const label = event.new_filename || event.original_url.split('/').pop() || event.original_url;
+    const msg = event.message ? '  — ' + event.message : '';
+    div.textContent = icon + ' ' + label + msg;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function showResults(successCount, errorCount, total) {
+    document.getElementById('section-progress').style.display = 'none';
+    document.getElementById('section-results').style.display = '';
+
+    const summary = document.getElementById('summary');
+    summary.innerHTML = `
+      <span class="chip chip-success">✓ ${successCount} uploaded</span>
+      ${errorCount > 0 ? `<span class="chip chip-error">✗ ${errorCount} failed</span>` : ''}
+    `;
+  }
+
+  function downloadResults() {
+    if (!currentJobId) return;
+    window.location.href = '/download/' + currentJobId;
+  }
+
+  function resetApp() {
+    currentJobId = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('fileLabel').textContent = '';
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressLabel').textContent = '0 / 0';
+    document.getElementById('section-results').style.display = 'none';
+    document.getElementById('section-progress').style.display = 'none';
+    document.getElementById('section-setup').style.display = '';
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = 'Start Processing';
+  }
+</script>
+
+</body>
+</html>
