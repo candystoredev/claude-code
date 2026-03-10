@@ -19,7 +19,7 @@ from openpyxl import Workbook, load_workbook
 
 load_dotenv()
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
@@ -349,7 +349,13 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
             return {
                 "index": idx, "total": len(rows),
                 "original_url": original_url, "new_filename": new_filename,
-                "new_url": "", "status": "error", "message": f"Upload failed: {e}",
+                "new_url": "", "status": "error",
+                "message": (
+                    f"Upload failed: {e} "
+                    f"[bucket={s3_config['bucket_name']}, "
+                    f"region={s3_config['region_name']}, "
+                    f"key={key}]"
+                ),
             }
         except Exception as e:
             return {
