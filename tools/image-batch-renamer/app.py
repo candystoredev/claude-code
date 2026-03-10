@@ -19,6 +19,8 @@ from openpyxl import Workbook, load_workbook
 
 load_dotenv()
 
+VERSION = "1.1.0"
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB upload limit
@@ -73,6 +75,7 @@ def index():
     if not _is_authenticated():
         return render_template("login.html")
     return render_template("index.html",
+        version=VERSION,
         storage_type=STORAGE_TYPE,
         r2=dict(account_id=R2_ACCOUNT_ID, bucket_name=R2_BUCKET_NAME,
                 access_key_id=R2_ACCESS_KEY_ID,
@@ -323,9 +326,7 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
                 "Body": image_bytes,
                 "ContentType": content_type,
             }
-            # Only set ACL for S3 (R2 uses bucket-level public access policy)
-            if s3_config["storage_type"] == "s3":
-                put_kwargs["ACL"] = "public-read"
+            # ACL not set — both S3 and R2 use bucket-level public access policy
 
             client.put_object(**put_kwargs)
 

@@ -21,6 +21,7 @@
       justify-content: space-between;
     }
     header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.02em; }
+    header h1 .version { font-size: 0.65em; font-weight: normal; opacity: 0.45; margin-left: 0.4em; }
     header a { color: #aab4e8; font-size: 0.8rem; text-decoration: none; }
     header a:hover { color: #fff; }
     .container { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
@@ -185,7 +186,7 @@
 <body>
 
 <header>
-  <h1>Image Batch Renamer</h1>
+  <h1>Image Batch Renamer <span class="version">v{{ version }}</span></h1>
   <a href="/logout">Sign out</a>
 </header>
 
