@@ -290,8 +290,8 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="public_base_url">Public base URL</label>
-          <div class="help">The root URL where your bucket is publicly accessible</div>
+          <label for="public_base_url">Public base URL <span style="font-weight:400;color:#888;">(optional)</span></label>
+          <div class="help">Only needed if your bucket has a custom public domain. Leave blank to use presigned URLs.</div>
           <input type="text" id="public_base_url" placeholder="https://pub-xxx.r2.dev" value="{{ (r2.public_base_url if storage_type == 'r2' else s3.public_base_url) }}">
         </div>
         <div class="form-group">
@@ -332,6 +332,10 @@
         The downloaded Excel file contains four columns: <code>original_url</code>, <code>new_filename</code>,
         <code>new_url</code>, and <code>status</code>. Use the <code>new_url</code> column as the
         <strong>Image Src</strong> in your Shopify import.
+      </p>
+      <p style="font-size:0.78rem;color:#999;margin-bottom:1.25rem;">
+        ⏱ URLs are presigned and expire after 7 days. To get permanent URLs, enable your bucket's public domain
+        and set the <em>Public base URL</em> field before processing.
       </p>
       <div id="download-error" class="alert alert-error" style="display:none;margin-bottom:1rem;"></div>
       <div style="display:flex;gap:1rem;flex-wrap:wrap;">
@@ -419,7 +423,6 @@
 
       if (!accessKeyId || !secretAccessKey) { showError('Access Key ID and Secret Access Key are required.'); return; }
       if (!bucketName) { showError('Bucket name is required.'); return; }
-      if (!publicBaseUrl) { showError('Public base URL is required.'); return; }
 
       formData.append('access_key_id', accessKeyId);
       formData.append('secret_access_key', secretAccessKey);
