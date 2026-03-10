@@ -24,7 +24,10 @@ Rules:
 - Mention occasion/use cases if provided or clearly relevant (Valentine's Day, Easter, candy buffets, party favors, etc)
 - Avoid marketing fluff: never use "delicious," "premium," "perfect treat," "indulge," "irresistible"
 - Avoid vague terms — be specific with quantities, flavors, formats
-- Do not invent details not present in the provided information or image"""
+- Do not invent details not present in the provided information or image
+- CRITICAL: If an "other store description" is provided, your description MUST be substantially different.
+  Use different sentence structures, different opening angles, different feature emphasis, and different
+  word choices. Never reuse phrases or mimic the structure of the other description."""
 
 
 def build_user_prompt(row: dict) -> str:
@@ -48,6 +51,9 @@ def build_user_prompt(row: dict) -> str:
 
     if row.get("occasion"):
         parts.append(f"Occasion: {row['occasion']}")
+
+    if row.get("store_a_description"):
+        parts.append(f"OTHER STORE description (DO NOT copy or closely resemble): {row['store_a_description']}")
 
     # Gather mini descriptions
     minis = []
