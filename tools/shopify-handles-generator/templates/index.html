@@ -155,22 +155,43 @@
 <body>
     <div class="container">
         <h1>Shopify Handle Generator</h1>
-        <p class="subtitle">Upload an Excel file with product names to generate clean, SEO-friendly Shopify handles.</p>
+        <p class="subtitle">Upload an Excel or CSV file with product names to generate clean, SEO-friendly Shopify handles.</p>
+
+        <!-- File Format Guide -->
+        <div class="card" id="format-guide">
+            <details>
+                <summary style="cursor:pointer; font-weight:600; color:#5c6ac4;">File Format Guide</summary>
+                <div style="margin-top:0.75rem; font-size:0.9rem; line-height:1.7; color:#555;">
+                    <p>Your file should have a header row with a column containing full product names. The tool auto-detects the right column.</p>
+                    <table style="margin:0.75rem 0; font-size:0.85rem; width:auto;">
+                        <thead><tr><th>Best headers</th><th>Example value</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>Product Name</code>, <code>Title</code>, <code>Product</code>, <code>Name</code></td>
+                                <td>Mike &amp; Ike Mega Mix Theater Box 5oz</td></tr>
+                        </tbody>
+                    </table>
+                    <p><strong>Important:</strong> Use the <em>full product name</em>, not the SKU or product code. Columns like <code>SKU</code>, <code>UPC</code>, <code>ID</code>, and <code>Barcode</code> are automatically skipped.</p>
+                    <p style="margin-top:0.5rem;">Supports <strong>.xlsx</strong> and <strong>.csv</strong> files (up to 10 MB).</p>
+                </div>
+            </details>
+        </div>
 
         <!-- Upload Card -->
         <div class="card" id="upload-card">
             <div class="upload-area" id="upload-area">
-                <input type="file" id="file-input" accept=".xlsx,.xls">
+                <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
                 <div class="upload-icon">&#128196;</div>
-                <p><strong>Drop your Excel file here</strong> or click to browse</p>
-                <p style="font-size:0.85rem; color:#999;">.xlsx files with product names</p>
+                <p><strong>Drop your Excel or CSV file here</strong> or click to browse</p>
+                <p style="font-size:0.85rem; color:#999;">.xlsx or .csv files with product names</p>
             </div>
             <div id="file-info" class="hidden" style="margin-top:1rem;">
                 <div class="file-info">
                     <span id="file-name"></span>
                 </div>
                 <div id="product-preview" class="product-list"></div>
-                <p>Found <span class="product-count" id="product-count">0</span> products</p>
+                <p>Found <span class="product-count" id="product-count">0</span> products
+                    <span id="detected-col" style="font-size:0.85rem; color:#888; margin-left:0.5rem;"></span>
+                </p>
                 <div class="btn-group">
                     <button class="btn" id="generate-btn" onclick="generateHandles()">Generate Handles</button>
                     <button class="btn btn-secondary" onclick="resetUpload()">Choose Different File</button>
@@ -256,6 +277,9 @@
                 productNames = data.product_names;
                 document.getElementById('file-name').textContent = file.name;
                 document.getElementById('product-count').textContent = productNames.length;
+                if (data.detected_column) {
+                    document.getElementById('detected-col').textContent = '(from column: ' + data.detected_column + ')';
+                }
                 document.getElementById('product-preview').textContent = productNames.slice(0, 20).join('\n') +
                     (productNames.length > 20 ? `\n... and ${productNames.length - 20} more` : '');
 
