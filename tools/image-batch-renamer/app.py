@@ -225,6 +225,30 @@ def stream(job_id: str):
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.route("/status/<job_id>")
+def status(job_id: str):
+    if not _is_authenticated():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    events = job["events"]
+    done_event = next((e for e in events if e.get("type") == "done"), None)
+    processed = sum(1 for e in events if e.get("type") != "done")
+
+    return jsonify({
+        "done": job["done"],
+        "processed": processed,
+        "total": job["total"],
+        "success_count": done_event["success_count"] if done_event else None,
+        "error_count": done_event["error_count"] if done_event else None,
+    })
+
+
 @app.route("/download/<job_id>")
 def download(job_id: str):
     if not _is_authenticated():
