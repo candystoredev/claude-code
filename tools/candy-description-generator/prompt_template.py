@@ -60,6 +60,13 @@ Avoid:
 - Overly promotional language ("must-have," "don't miss out").
 - Company/shipping boilerplate.
 
+Existing description handling:
+- You may receive an "Existing site description" — this is the product's current description on our website.
+- Mine it for useful descriptive context: flavor notes, texture, appearance, candy type, and use cases.
+- DO NOT trust it for unit sizes, quantities, weights, or piece counts — these may be outdated or incorrect.
+- For unit sizes and quantities, always defer to the manufacturer description, Units/sizing field, and product image.
+- Do not copy its structure or phrasing — write a fresh description following the rules above.
+
 Use natural, conversational language that customers actually search for. Write for humans first, search engines second.
 Include use-case phrases like "perfect for," "ideal for," "great for" naturally.
 Do not invent details not present in the provided information or image."""
@@ -73,7 +80,10 @@ def build_user_prompt(row: dict) -> str:
         parts.append(f"Brand/Vendor: {row['Vendor']}")
 
     if row.get("description"):
-        parts.append(f"Current description: {row['description']}")
+        parts.append(f"Manufacturer description: {row['description']}")
+
+    if row.get("existing_description"):
+        parts.append(f"Existing site description (use for descriptive context only, not unit sizes): {row['existing_description']}")
 
     if row.get("units_01"):
         parts.append(f"Units/sizing: {row['units_01']}")
