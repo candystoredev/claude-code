@@ -94,6 +94,7 @@
     .drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
     .drop-zone p { font-size: 0.88rem; color: #666; }
     .drop-zone .filename { font-weight: 600; color: #5c6ac4; margin-top: 0.4rem; font-size: 0.88rem; }
+    .drop-zone .file-hint { font-size: 0.76rem; color: #aaa; margin-top: 0.3rem; }
 
     .btn {
       background: #5c6ac4;
@@ -130,7 +131,13 @@
       transition: width 0.3s ease;
       width: 0%;
     }
-    .progress-label { font-size: 0.85rem; color: #555; margin-bottom: 1rem; }
+    .progress-label { font-size: 0.85rem; color: #555; margin-bottom: 0.5rem; }
+    .column-info {
+      font-size: 0.78rem;
+      color: #888;
+      margin-bottom: 1rem;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
 
     /* Log */
     .log {
@@ -160,7 +167,16 @@
     .chip-error { background: #ffebee; color: #c62828; }
 
     .alert { padding: 0.85rem 1rem; border-radius: 6px; font-size: 0.88rem; margin-bottom: 1rem; }
-    .alert-error { background: #ffebee; color: #c62828; }
+    .alert-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+    .alert-warning { background: #fff8e1; color: #7a5f00; border: 1px solid #ffe082; }
+
+    /* Uploading spinner state */
+    .uploading-msg {
+      display: none;
+      font-size: 0.88rem;
+      color: #5c6ac4;
+      margin-top: 0.75rem;
+    }
 
     /* Hidden sections */
     #section-progress, #section-results { display: none; }
@@ -189,6 +205,7 @@
         <div class="icon">📄</div>
         <p>Drag &amp; drop your CSV or Excel file here, or click to browse</p>
         <div class="filename" id="fileLabel"></div>
+        <div class="file-hint">Max 50 MB · .csv, .xlsx, .xls</div>
       </div>
     </div>
 
@@ -288,6 +305,7 @@
     <div id="setup-error" class="alert alert-error" style="display:none;"></div>
 
     <button class="btn" id="startBtn" onclick="startProcessing()">Start Processing</button>
+    <div class="uploading-msg" id="uploadingMsg">⏳ Uploading &amp; parsing file…</div>
   </div>
 
   <!-- ── PROGRESS SECTION ── -->
@@ -298,6 +316,8 @@
         <div class="progress-bar-fill" id="progressFill"></div>
       </div>
       <div class="progress-label" id="progressLabel">0 / 0</div>
+      <div class="column-info" id="columnInfo"></div>
+      <div id="stream-error" class="alert alert-warning" style="display:none;"></div>
       <div class="log" id="log"></div>
     </div>
   </div>
@@ -312,6 +332,7 @@
         <code>new_url</code>, and <code>status</code>. Use the <code>new_url</code> column as the
         <strong>Image Src</strong> in your Shopify import.
       </p>
+      <div id="download-error" class="alert alert-error" style="display:none;margin-bottom:1rem;"></div>
       <div style="display:flex;gap:1rem;flex-wrap:wrap;">
         <button class="btn" id="downloadBtn" onclick="downloadResults()">Download Results (Excel)</button>
         <button class="btn btn-secondary" onclick="resetApp()">Process another batch</button>
@@ -323,6 +344,7 @@
 
 <script>
   let currentJobId = null;
+  let jobDone = false;
   const PRECONFIGURED = {{ 'true' if preconfigured else 'false' }};
   let currentStorageType = '{{ storage_type }}';
 
@@ -413,6 +435,7 @@
     const btn = document.getElementById('startBtn');
     btn.disabled = true;
     btn.textContent = 'Starting…';
+    document.getElementById('uploadingMsg').style.display = 'block';
 
     let resp, data;
     try {
@@ -421,9 +444,12 @@
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Start Processing';
+      document.getElementById('uploadingMsg').style.display = 'none';
       showError('Network error: ' + e.message);
       return;
     }
+
+    document.getElementById('uploadingMsg').style.display = 'none';
 
     if (!resp.ok) {
       btn.disabled = false;
@@ -433,12 +459,19 @@
     }
 
     currentJobId = data.job_id;
+    jobDone = false;
     const total = data.total;
 
     // Switch to progress view
     document.getElementById('section-setup').style.display = 'none';
-    document.getElementById('section-progress').style.display = '';
+    document.getElementById('section-progress').style.display = 'block';
     updateProgress(0, total);
+
+    // Show detected column names
+    const urlCol = data.url_col || '(first column)';
+    const nameCol = data.name_col || '(none — using original filename)';
+    document.getElementById('columnInfo').textContent =
+      `Processing ${total} row${total !== 1 ? 's' : ''} · URL column: ${urlCol} · Filename column: ${nameCol}`;
 
     // Open SSE stream
     const evtSource = new EventSource('/stream/' + currentJobId);
@@ -448,6 +481,7 @@
       const event = JSON.parse(e.data);
 
       if (event.type === 'done') {
+        jobDone = true;
         evtSource.close();
         showResults(event.success_count, event.error_count, total);
         return;
@@ -460,7 +494,13 @@
 
     evtSource.onerror = () => {
       evtSource.close();
-      // If we've received a done event, ignore the error (stream closed normally)
+      if (!jobDone) {
+        const errEl = document.getElementById('stream-error');
+        errEl.innerHTML = '⚠️ Connection to server lost. Your job may still be running in the background. ' +
+          'If results don\'t appear, check Railway logs and re-run if needed. ' +
+          '<a href="javascript:location.reload()" style="color:inherit;font-weight:600;">Reload page</a>';
+        errEl.style.display = 'block';
+      }
     };
   }
 
@@ -484,7 +524,7 @@
 
   function showResults(successCount, errorCount, total) {
     document.getElementById('section-progress').style.display = 'none';
-    document.getElementById('section-results').style.display = '';
+    document.getElementById('section-results').style.display = 'block';
 
     const summary = document.getElementById('summary');
     summary.innerHTML = `
@@ -493,23 +533,51 @@
     `;
   }
 
-  function downloadResults() {
+  async function downloadResults() {
     if (!currentJobId) return;
-    window.location.href = '/download/' + currentJobId;
+
+    const errEl = document.getElementById('download-error');
+    errEl.style.display = 'none';
+
+    try {
+      const resp = await fetch('/download/' + currentJobId);
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        errEl.textContent = data.error || 'Download failed — results may have expired. Please re-run the batch.';
+        errEl.style.display = 'block';
+        return;
+      }
+      // Trigger download via blob
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'image-batch-renamer-results.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      errEl.textContent = 'Network error during download: ' + e.message;
+      errEl.style.display = 'block';
+    }
   }
 
   function resetApp() {
     currentJobId = null;
+    jobDone = false;
     document.getElementById('fileInput').value = '';
     document.getElementById('fileLabel').textContent = '';
     document.getElementById('log').innerHTML = '';
     document.getElementById('progressFill').style.width = '0%';
     document.getElementById('progressLabel').textContent = '0 / 0';
+    document.getElementById('columnInfo').textContent = '';
+    document.getElementById('stream-error').style.display = 'none';
+    document.getElementById('download-error').style.display = 'none';
     document.getElementById('section-results').style.display = 'none';
     document.getElementById('section-progress').style.display = 'none';
     document.getElementById('section-setup').style.display = '';
     document.getElementById('startBtn').disabled = false;
     document.getElementById('startBtn').textContent = 'Start Processing';
+    document.getElementById('uploadingMsg').style.display = 'none';
   }
 </script>
 

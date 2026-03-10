@@ -4,7 +4,6 @@ import json
 import mimetypes
 import os
 import re
-import tempfile
 import threading
 import time
 import uuid
@@ -15,7 +14,7 @@ import boto3
 import requests
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file, session
 from openpyxl import Workbook, load_workbook
 
 load_dotenv()
@@ -52,6 +51,7 @@ _jobs_lock = threading.Lock()
 
 MAX_WORKERS = 8
 JOB_TTL_SECONDS = 3600  # 1 hour
+MAX_JOBS = 500           # evict oldest when exceeded
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ JOB_TTL_SECONDS = 3600  # 1 hour
 def _is_authenticated() -> bool:
     if not APP_PASSWORD:
         return True
-    return request.cookies.get("auth") == APP_PASSWORD
+    return session.get("authenticated") is True
 
 
 # ---------------------------------------------------------------------------
@@ -75,11 +75,13 @@ def index():
     return render_template("index.html",
         storage_type=STORAGE_TYPE,
         r2=dict(account_id=R2_ACCOUNT_ID, bucket_name=R2_BUCKET_NAME,
-                access_key_id=R2_ACCESS_KEY_ID, secret_key=R2_SECRET_KEY,
+                access_key_id=R2_ACCESS_KEY_ID,
+                secret_key="" if R2_PRECONFIGURED else R2_SECRET_KEY,
                 public_base_url=R2_PUBLIC_BASE_URL, folder_prefix=R2_FOLDER_PREFIX,
                 preconfigured=R2_PRECONFIGURED),
         s3=dict(bucket_name=S3_BUCKET_NAME, access_key_id=S3_ACCESS_KEY_ID,
-                secret_key=S3_SECRET_KEY, public_base_url=S3_PUBLIC_BASE_URL,
+                secret_key="" if S3_PRECONFIGURED else S3_SECRET_KEY,
+                public_base_url=S3_PUBLIC_BASE_URL,
                 folder_prefix=S3_FOLDER_PREFIX, region=S3_REGION,
                 preconfigured=S3_PRECONFIGURED),
     )
@@ -89,17 +91,15 @@ def index():
 def login():
     pw = request.form.get("password", "")
     if pw == APP_PASSWORD:
-        resp = Response("", status=302, headers={"Location": "/"})
-        resp.set_cookie("auth", pw, httponly=True, samesite="Lax")
-        return resp
+        session["authenticated"] = True
+        return Response("", status=302, headers={"Location": "/"})
     return render_template("login.html", error="Incorrect password.")
 
 
 @app.route("/logout")
 def logout():
-    resp = Response("", status=302, headers={"Location": "/"})
-    resp.delete_cookie("auth")
-    return resp
+    session.clear()
+    return Response("", status=302, headers={"Location": "/"})
 
 
 @app.route("/process", methods=["POST"])
@@ -140,7 +140,7 @@ def process():
     filename = f.filename or ""
 
     try:
-        rows = _parse_spreadsheet(f, filename)
+        rows, url_col, name_col = _parse_spreadsheet(f, filename)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
@@ -166,6 +166,13 @@ def process():
         "folder_prefix": folder_prefix,
     }
 
+    # --- Evict oldest jobs if over limit ---
+    with _jobs_lock:
+        if len(_jobs) > MAX_JOBS:
+            sorted_ids = sorted(_jobs.keys(), key=lambda jid: _jobs[jid].get("created_at", 0))
+            for jid in sorted_ids[:100]:
+                del _jobs[jid]
+
     # --- Create job and start background thread ---
     job_id = str(uuid.uuid4())
     with _jobs_lock:
@@ -181,7 +188,7 @@ def process():
     thread = threading.Thread(target=_run_job, args=(job_id, rows, s3_config), daemon=True)
     thread.start()
 
-    return jsonify({"job_id": job_id, "total": len(rows)})
+    return jsonify({"job_id": job_id, "total": len(rows), "url_col": url_col, "name_col": name_col})
 
 
 @app.route("/stream/<job_id>")
@@ -194,17 +201,17 @@ def stream(job_id: str):
         while True:
             with _jobs_lock:
                 job = _jobs.get(job_id)
+                if job is None:
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    return
+                events_snapshot = list(job["events"])
+                is_done = job["done"]
 
-            if job is None:
-                yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
-                return
-
-            events = job["events"]
-            while sent < len(events):
-                yield f"data: {json.dumps(events[sent])}\n\n"
+            while sent < len(events_snapshot):
+                yield f"data: {json.dumps(events_snapshot[sent])}\n\n"
                 sent += 1
 
-            if job["done"] and sent >= len(events):
+            if is_done and sent >= len(events_snapshot):
                 return
 
             time.sleep(0.2)
@@ -221,26 +228,20 @@ def download(job_id: str):
     with _jobs_lock:
         job = _jobs.get(job_id)
 
-    if not job or not job["done"]:
+    if not job:
+        return jsonify({"error": "Results not found or expired — please re-run the batch"}), 404
+
+    if not job["done"]:
         return jsonify({"error": "Job not ready"}), 404
 
     output_bytes = job.get("output_bytes")
     if not output_bytes:
         return jsonify({"error": "No output available"}), 500
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    tmp.write(output_bytes)
-    tmp.close()
-
-    # Clean up job after a short delay
-    def _cleanup():
-        time.sleep(30)
-        with _jobs_lock:
-            _jobs.pop(job_id, None)
-    threading.Thread(target=_cleanup, daemon=True).start()
-
+    buf = io.BytesIO(output_bytes)
+    buf.seek(0)
     return send_file(
-        tmp.name,
+        buf,
         as_attachment=True,
         download_name="image-batch-renamer-results.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -253,6 +254,8 @@ def download(job_id: str):
 
 def _run_job(job_id: str, rows: list[dict], s3_config: dict):
     results = []
+    seen_keys: set[str] = set()
+    seen_keys_lock = threading.Lock()
 
     def process_one(idx_row):
         idx, row = idx_row
@@ -260,12 +263,21 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
         new_filename = row.get("new_filename", "").strip()
 
         if not original_url:
-            result = {
+            return {
                 "index": idx, "total": len(rows),
                 "original_url": original_url, "new_filename": "",
                 "new_url": "", "status": "error", "message": "Empty URL — skipped",
             }
-            return result
+
+        # Validate URL scheme (prevent SSRF)
+        parsed = urlparse(original_url)
+        if parsed.scheme not in ("http", "https"):
+            return {
+                "index": idx, "total": len(rows),
+                "original_url": original_url, "new_filename": "",
+                "new_url": "", "status": "error",
+                "message": f"Invalid URL scheme '{parsed.scheme}' — only http/https allowed",
+            }
 
         try:
             # 1. Download image
@@ -278,9 +290,23 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
             # 2. Determine final filename
             final_filename = _resolve_filename(new_filename, original_url, content_type)
 
-            # 3. Build S3 key
+            # 3. Build S3 key, resolving collisions
             prefix = s3_config["folder_prefix"]
-            key = f"{prefix}/{final_filename}" if prefix else final_filename
+            base_key = f"{prefix}/{final_filename}" if prefix else final_filename
+
+            with seen_keys_lock:
+                key = base_key
+                if key in seen_keys:
+                    stem, ext = os.path.splitext(final_filename)
+                    counter = 2
+                    while key in seen_keys:
+                        suffixed = f"{stem}-{counter}{ext}"
+                        key = f"{prefix}/{suffixed}" if prefix else suffixed
+                        counter += 1
+                    final_filename = os.path.basename(key)
+                seen_keys.add(key)
+
+            collision_note = f" (renamed: collision with earlier row)" if key != base_key else ""
 
             # 4. Upload to S3/R2
             client = boto3.client(
@@ -309,7 +335,7 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
             return {
                 "index": idx, "total": len(rows),
                 "original_url": original_url, "new_filename": final_filename,
-                "new_url": new_url, "status": "success", "message": "",
+                "new_url": new_url, "status": "success", "message": collision_note.strip(),
             }
 
         except requests.RequestException as e:
@@ -331,62 +357,73 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
                 "new_url": "", "status": "error", "message": f"Unexpected error: {e}",
             }
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(process_one, (i, row)): i for i, row in enumerate(rows)}
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(result)
-            with _jobs_lock:
-                _jobs[job_id]["events"].append(result)
-
-    # Sort results by original index for ordered output
-    results.sort(key=lambda r: r["index"])
-
-    # Build output Excel
-    output_bytes = _build_output_excel(results)
-
-    with _jobs_lock:
-        _jobs[job_id]["output_bytes"] = output_bytes
-        _jobs[job_id]["done"] = True
-        # Append a final "done" event
+    try:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {executor.submit(process_one, (i, row)): i for i, row in enumerate(rows)}
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                except Exception as e:
+                    idx = futures[future]
+                    result = {
+                        "index": idx, "total": len(rows),
+                        "original_url": rows[idx].get("original_url", ""),
+                        "new_filename": "", "new_url": "",
+                        "status": "error", "message": f"Internal error: {e}",
+                    }
+                results.append(result)
+                with _jobs_lock:
+                    _jobs[job_id]["events"].append(result)
+    finally:
+        # Always mark job done, even if something went wrong
+        results.sort(key=lambda r: r["index"])
+        output_bytes = _build_output_excel(results)
         success_count = sum(1 for r in results if r["status"] == "success")
-        _jobs[job_id]["events"].append({
-            "type": "done",
-            "total": len(rows),
-            "success_count": success_count,
-            "error_count": len(rows) - success_count,
-        })
-
-    # Schedule TTL cleanup
-    def _ttl_cleanup():
-        time.sleep(JOB_TTL_SECONDS)
         with _jobs_lock:
-            _jobs.pop(job_id, None)
-    threading.Thread(target=_ttl_cleanup, daemon=True).start()
+            _jobs[job_id]["output_bytes"] = output_bytes
+            _jobs[job_id]["done"] = True
+            _jobs[job_id]["events"].append({
+                "type": "done",
+                "total": len(rows),
+                "success_count": success_count,
+                "error_count": len(rows) - success_count,
+            })
+
+        # Schedule TTL cleanup
+        def _ttl_cleanup():
+            time.sleep(JOB_TTL_SECONDS)
+            with _jobs_lock:
+                _jobs.pop(job_id, None)
+        threading.Thread(target=_ttl_cleanup, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _parse_spreadsheet(file_obj, filename: str) -> list[dict]:
-    """Parse CSV or Excel into list of dicts with 'original_url' and 'new_filename'."""
+def _parse_spreadsheet(file_obj, filename: str) -> tuple[list[dict], str, str]:
+    """Parse CSV or Excel into list of dicts with 'original_url' and 'new_filename'.
+    Returns (rows, url_col_name, name_col_name).
+    """
     name = filename.lower()
 
     if name.endswith(".csv"):
         content = file_obj.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(content))
         raw_rows = list(reader)
-        headers = reader.fieldnames or []
+        headers = list(reader.fieldnames or [])
     elif name.endswith((".xlsx", ".xls")):
         wb = load_workbook(file_obj, read_only=True, data_only=True)
-        ws = wb.active
-        rows_iter = ws.iter_rows(values_only=True)
-        header_row = next(rows_iter, None)
-        if not header_row:
-            return []
-        headers = [str(h or "").strip() for h in header_row]
-        raw_rows = [dict(zip(headers, row)) for row in rows_iter]
+        try:
+            ws = wb.active
+            rows_iter = ws.iter_rows(values_only=True)
+            header_row = next(rows_iter, None)
+            if not header_row:
+                return [], "", ""
+            headers = [str(h or "").strip() for h in header_row]
+            raw_rows = [dict(zip(headers, row)) for row in rows_iter]
+        finally:
+            wb.close()
     else:
         raise ValueError("Unsupported file format. Upload a .csv, .xlsx, or .xls file.")
 
@@ -397,7 +434,12 @@ def _parse_spreadsheet(file_obj, filename: str) -> list[dict]:
         # Fall back to first column
         url_col = headers[0] if headers else None
     if name_col is None and len(headers) >= 2:
-        name_col = headers[1]
+        # Only use the second column if it looks like a filename column
+        candidate = headers[1]
+        candidate_lower = candidate.lower()
+        skip_words = {"desc", "description", "title", "caption", "alt", "tag", "category", "price", "sku"}
+        if not any(w in candidate_lower for w in skip_words):
+            name_col = candidate
 
     rows = []
     for raw in raw_rows:
@@ -406,7 +448,7 @@ def _parse_spreadsheet(file_obj, filename: str) -> list[dict]:
         if url_val:
             rows.append({"original_url": url_val, "new_filename": name_val})
 
-    return rows
+    return rows, (url_col or ""), (name_col or "")
 
 
 def _find_column(headers: list[str], candidates: list[str]) -> str | None:
