@@ -517,12 +517,30 @@
           errEl.style.display = 'block';
           setTimeout(openStream, 2000);
         } else {
-          errEl.innerHTML = '⚠️ Connection to server lost. Your job may still be running in the background. ' +
-            'If results don\'t appear, check Railway logs and re-run if needed. ' +
-            '<a href="javascript:location.reload()" style="color:inherit;font-weight:600;">Reload page</a>';
+          // SSE keeps failing — fall back to polling /status every 5s
+          errEl.textContent = '⚠️ Live connection unavailable — polling for completion…';
           errEl.style.display = 'block';
+          startPolling();
         }
       };
+    }
+
+    function startPolling() {
+      const interval = setInterval(async () => {
+        if (jobDone) { clearInterval(interval); return; }
+        try {
+          const resp = await fetch('/status/' + currentJobId);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          updateProgress(data.processed, total);
+          if (data.done) {
+            jobDone = true;
+            clearInterval(interval);
+            document.getElementById('stream-error').style.display = 'none';
+            showResults(data.success_count, data.error_count, total);
+          }
+        } catch (_) { /* ignore transient fetch errors */ }
+      }, 5000);
     }
 
     openStream();
