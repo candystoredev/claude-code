@@ -437,7 +437,7 @@
 
     // Switch to progress view
     document.getElementById('section-setup').style.display = 'none';
-    document.getElementById('section-progress').style.display = '';
+    document.getElementById('section-progress').style.display = 'block';
     updateProgress(0, total);
 
     // Open SSE stream
@@ -484,7 +484,7 @@
 
   function showResults(successCount, errorCount, total) {
     document.getElementById('section-progress').style.display = 'none';
-    document.getElementById('section-results').style.display = '';
+    document.getElementById('section-results').style.display = 'block';
 
     const summary = document.getElementById('summary');
     summary.innerHTML = `
