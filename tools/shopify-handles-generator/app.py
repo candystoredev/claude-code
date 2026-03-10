@@ -1,7 +1,6 @@
 import os
 import io
 import json
-import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 from openpyxl import load_workbook, Workbook
 from anthropic import Anthropic, AuthenticationError, APIError
@@ -91,48 +90,138 @@ def generate_handles():
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 
+PRODUCT_HEADERS = {"product", "product name", "product_name", "title", "name", "item", "item name", "product title", "product-name"}
+SKIP_HEADERS = {"sku", "id", "upc", "barcode", "code", "product code", "item number", "item_number", "item #", "sku #"}
+
+
+def _parse_excel(file):
+    wb = load_workbook(file)
+    ws = wb.active
+    headers = {}
+    for col in range(1, ws.max_column + 1):
+        val = str(ws.cell(row=1, column=col).value or "").lower().strip()
+        headers[col] = val
+
+    product_col = None
+    detected_header = None
+
+    # First pass: look for explicit product name headers
+    for col, header in headers.items():
+        if header in PRODUCT_HEADERS:
+            product_col = col
+            detected_header = header
+            break
+
+    # Second pass: pick the first text-heavy column that isn't a known skip column
+    if product_col is None:
+        for col in range(1, ws.max_column + 1):
+            header = headers.get(col, "")
+            if header in SKIP_HEADERS:
+                continue
+            # Check if column values look like product names (longer text, not codes)
+            sample_vals = []
+            for r in range(2, min(ws.max_row + 1, 7)):
+                v = ws.cell(row=r, column=col).value
+                if v:
+                    sample_vals.append(str(v).strip())
+            if sample_vals:
+                avg_len = sum(len(v) for v in sample_vals) / len(sample_vals)
+                if avg_len > 10:  # Product names are typically longer than SKUs/codes
+                    product_col = col
+                    detected_header = header or f"Column {col}"
+                    break
+
+    # Final fallback: first non-skip column
+    if product_col is None:
+        for col in range(1, ws.max_column + 1):
+            header = headers.get(col, "")
+            if header not in SKIP_HEADERS:
+                product_col = col
+                detected_header = header or f"Column {col}"
+                break
+        if product_col is None:
+            product_col = 1
+            detected_header = headers.get(1, "Column 1")
+
+    product_names = []
+    for row in range(2, ws.max_row + 1):
+        val = ws.cell(row=row, column=product_col).value
+        if val and str(val).strip():
+            product_names.append(str(val).strip())
+
+    return product_names, detected_header
+
+
+def _parse_csv(file):
+    import csv
+    content = file.read().decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(content))
+    rows = list(reader)
+    if not rows:
+        return [], "empty"
+
+    headers = [h.lower().strip() for h in rows[0]]
+
+    product_col = None
+    detected_header = None
+
+    for i, header in enumerate(headers):
+        if header in PRODUCT_HEADERS:
+            product_col = i
+            detected_header = header
+            break
+
+    if product_col is None:
+        for i, header in enumerate(headers):
+            if header in SKIP_HEADERS:
+                continue
+            sample_vals = [rows[r][i] for r in range(1, min(len(rows), 6)) if i < len(rows[r]) and rows[r][i].strip()]
+            if sample_vals:
+                avg_len = sum(len(v) for v in sample_vals) / len(sample_vals)
+                if avg_len > 10:
+                    product_col = i
+                    detected_header = header or f"Column {i + 1}"
+                    break
+
+    if product_col is None:
+        for i, header in enumerate(headers):
+            if header not in SKIP_HEADERS:
+                product_col = i
+                detected_header = header or f"Column {i + 1}"
+                break
+        if product_col is None:
+            product_col = 0
+            detected_header = headers[0] if headers else "Column 1"
+
+    product_names = []
+    for row in rows[1:]:
+        if product_col < len(row) and row[product_col].strip():
+            product_names.append(row[product_col].strip())
+
+    return product_names, detected_header
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
-    if not file.filename.endswith((".xlsx", ".xls")):
-        return jsonify({"error": "Please upload an Excel file (.xlsx)"}), 400
+    filename = file.filename.lower()
 
-    wb = load_workbook(file)
-    ws = wb.active
+    if filename.endswith((".xlsx", ".xls")):
+        product_names, detected_header = _parse_excel(file)
+    elif filename.endswith(".csv"):
+        product_names, detected_header = _parse_csv(file)
+    else:
+        return jsonify({"error": "Please upload an Excel (.xlsx) or CSV (.csv) file"}), 400
 
-    # Find the column with product names (look for common headers)
-    product_col = None
-    header_row = 1
-    product_names = []
-
-    for col in range(1, ws.max_column + 1):
-        header = str(ws.cell(row=1, column=col).value or "").lower().strip()
-        if header in ("product", "product name", "product_name", "title", "name", "item", "item name"):
-            product_col = col
-            break
-
-    if product_col is None:
-        # Default to first column
-        product_col = 1
-        # Check if first row looks like a header
-        first_val = str(ws.cell(row=1, column=1).value or "")
-        if first_val and not first_val[0].isdigit():
-            header_row = 1
-        else:
-            header_row = 0
-
-    for row in range(header_row + 1, ws.max_row + 1):
-        val = ws.cell(row=row, column=product_col).value
-        if val and str(val).strip():
-            product_names.append(str(val).strip())
+    if not product_names:
+        return jsonify({"error": "No product names found. Make sure your file has a column with product names (see format guide below)."}), 400
 
     return jsonify({
         "product_names": product_names,
-        "product_col": product_col,
-        "header_row": header_row,
+        "detected_column": detected_header,
     })
 
 
@@ -154,12 +243,12 @@ def download_file():
         max_len = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 60)
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
 
     return send_file(
-        tmp.name,
+        buf,
         as_attachment=True,
         download_name="shopify_handles.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.xml",
@@ -167,4 +256,6 @@ def download_file():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_ENV") != "production"
+    app.run(debug=debug, host="0.0.0.0", port=port)
