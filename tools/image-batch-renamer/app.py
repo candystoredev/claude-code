@@ -19,7 +19,7 @@ from openpyxl import Workbook, load_workbook
 
 load_dotenv()
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 PRESIGNED_URL_EXPIRY = int(os.environ.get("PRESIGNED_URL_EXPIRY", 604800))  # default 7 days
 
