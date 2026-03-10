@@ -42,7 +42,10 @@ def generate_handles():
     if not client:
         return jsonify({"error": "ANTHROPIC_API_KEY is not set. Add it to your .env file and restart the server."}), 500
 
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request body"}), 400
+
     product_names = data.get("product_names", [])
     existing_handles = data.get("existing_handles", [])
 
@@ -54,10 +57,13 @@ def generate_handles():
         for j, name in enumerate(product_names, 1):
             user_message += f"{j}. {name}\n"
 
+        # Only send the most recent handles to avoid prompt bloat/timeouts
+        # on large files. 200 recent handles is enough for dedup context.
         if existing_handles:
+            recent_handles = existing_handles[-200:]
             user_message += (
                 "\n\nAlready-used handles (must not duplicate): "
-                + ", ".join(existing_handles)
+                + ", ".join(recent_handles)
             )
 
         message = client.messages.create(

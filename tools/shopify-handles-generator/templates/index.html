@@ -290,6 +290,32 @@
             }
         }
 
+        async function fetchWithRetry(url, options, retries = 2) {
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                const resp = await fetch(url, options);
+                const text = await resp.text();
+
+                // Check if we got HTML back instead of JSON (proxy/timeout error)
+                if (text.trimStart().startsWith('<')) {
+                    if (attempt < retries) {
+                        const delay = (attempt + 1) * 3000;
+                        await new Promise(r => setTimeout(r, delay));
+                        continue;
+                    }
+                    throw new Error('Server returned an error page. The batch may be too large or the server timed out. Try again.');
+                }
+
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    throw new Error('Invalid response from server');
+                }
+
+                return { resp, data };
+            }
+        }
+
         async function generateHandles() {
             hideError();
             document.getElementById('upload-card').classList.add('hidden');
@@ -307,12 +333,11 @@
                         `Processing batch ${batchNum} of ${totalBatches} (${Math.min(i + batchSize, productNames.length)} of ${productNames.length} products)...`;
 
                     const batch = productNames.slice(i, i + batchSize);
-                    const resp = await fetch('/generate', {
+                    const { resp, data } = await fetchWithRetry('/generate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ product_names: batch, existing_handles: allHandles }),
                     });
-                    const data = await resp.json();
 
                     if (!resp.ok) {
                         showError(data.error || 'Generation failed');
