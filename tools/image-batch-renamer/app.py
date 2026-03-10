@@ -19,7 +19,9 @@ from openpyxl import Workbook, load_workbook
 
 load_dotenv()
 
-VERSION = "1.1.2"
+VERSION = "1.2.0"
+
+PRESIGNED_URL_EXPIRY = int(os.environ.get("PRESIGNED_URL_EXPIRY", 604800))  # default 7 days
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
@@ -44,8 +46,8 @@ S3_PUBLIC_BASE_URL = os.environ.get("S3_PUBLIC_BASE_URL", "")
 S3_FOLDER_PREFIX   = os.environ.get("S3_FOLDER_PREFIX", "")
 S3_REGION          = os.environ.get("S3_REGION", "us-east-1")
 
-R2_PRECONFIGURED = all([R2_ACCOUNT_ID, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, R2_SECRET_KEY, R2_PUBLIC_BASE_URL])
-S3_PRECONFIGURED = all([S3_BUCKET_NAME, S3_ACCESS_KEY_ID, S3_SECRET_KEY, S3_PUBLIC_BASE_URL])
+R2_PRECONFIGURED = all([R2_ACCOUNT_ID, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, R2_SECRET_KEY])
+S3_PRECONFIGURED = all([S3_BUCKET_NAME, S3_ACCESS_KEY_ID, S3_SECRET_KEY])
 
 # In-memory job store: job_id -> {"rows": [...], "events": [...], "done": bool, "output_bytes": bytes|None}
 _jobs: dict = {}
@@ -129,8 +131,8 @@ def process():
         account_id        = ""
         aws_region        = request.form.get("aws_region", "").strip()        or S3_REGION
 
-    if not all([access_key_id, secret_access_key, bucket_name, public_base_url]):
-        return jsonify({"error": "Missing required fields: access_key_id, secret_access_key, bucket_name, public_base_url"}), 400
+    if not all([access_key_id, secret_access_key, bucket_name]):
+        return jsonify({"error": "Missing required fields: access_key_id, secret_access_key, bucket_name"}), 400
 
     if storage_type == "r2" and not account_id:
         return jsonify({"error": "Account ID is required for Cloudflare R2"}), 400
@@ -330,8 +332,12 @@ def _run_job(job_id: str, rows: list[dict], s3_config: dict):
 
             client.put_object(**put_kwargs)
 
-            # 5. Construct new URL
-            new_url = f"{s3_config['public_base_url']}/{key}"
+            # 5. Generate presigned URL (valid for PRESIGNED_URL_EXPIRY seconds)
+            new_url = client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": s3_config["bucket_name"], "Key": key},
+                ExpiresIn=PRESIGNED_URL_EXPIRY,
+            )
 
             return {
                 "index": idx, "total": len(rows),
