@@ -445,8 +445,11 @@ def _parse_spreadsheet(file_obj, filename: str) -> tuple[list[dict], str, str]:
     name_col = _find_column(headers, ["new_filename", "filename", "new_name", "new name"])
 
     if url_col is None:
-        # Fall back to first column
-        url_col = headers[0] if headers else None
+        # Fall back to first column that isn't a SKU column
+        for h in headers:
+            if "sku" not in h.lower():
+                url_col = h
+                break
     if name_col is None and len(headers) >= 2:
         # Only use the second column if it looks like a filename column
         candidate = headers[1]
