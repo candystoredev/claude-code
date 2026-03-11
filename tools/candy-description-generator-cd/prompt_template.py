@@ -12,7 +12,7 @@ Tone & voice:
 
 Structure:
 - Opening paragraph: 1-2 sentences stating what the product is and its key value proposition
-- Bullet points: 3-5 concise bullets with key product specs (flavor, format, quantity, dietary info, occasion)
+- Bullet list: 3-5 concise bullets as an HTML unordered list (<ul><li>…</li></ul>) with key product specs (flavor, format, quantity, dietary info, occasion)
 - Closing paragraph: 1-2 sentences with a practical reason to buy
 - Target 75-120 words total. Simple products ~75 words, variety/bulk packs ~120 words
 
@@ -22,6 +22,7 @@ Rules:
 - Use natural, searchable language — how customers actually describe candy
 - Include certifications and dietary claims when present
 - Mention occasion/use cases if provided or clearly relevant (Valentine's Day, Easter, candy buffets, party favors, etc)
+- Use only plain ASCII characters — no special Unicode dashes, bullets, or symbols. Use HTML entities when needed (e.g., &mdash; for em-dash)
 - Avoid marketing fluff: never use "delicious," "premium," "perfect treat," "indulge," "irresistible"
 - Avoid vague terms — be specific with quantities, flavors, formats
 - Do not invent details not present in the provided information or image
