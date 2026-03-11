@@ -12,7 +12,7 @@ Tone & voice:
 
 Structure:
 - Opening paragraph: 1-2 sentences stating what the product is and its key value proposition
-- Bullet points: 3-5 concise bullets with key product specs (flavor, format, quantity, dietary info, occasion)
+- Bullet list: 3-5 concise bullets as an HTML unordered list (<ul><li>…</li></ul>) with key product specs (flavor, format, quantity, dietary info, occasion)
 - Closing paragraph: 1-2 sentences with a practical reason to buy
 - Target 75-120 words total. Simple products ~75 words, variety/bulk packs ~120 words
 
@@ -22,9 +22,13 @@ Rules:
 - Use natural, searchable language — how customers actually describe candy
 - Include certifications and dietary claims when present
 - Mention occasion/use cases if provided or clearly relevant (Valentine's Day, Easter, candy buffets, party favors, etc)
+- Use only plain ASCII characters — no special Unicode dashes, bullets, or symbols. Use HTML entities when needed (e.g., &mdash; for em-dash)
 - Avoid marketing fluff: never use "delicious," "premium," "perfect treat," "indulge," "irresistible"
 - Avoid vague terms — be specific with quantities, flavors, formats
-- Do not invent details not present in the provided information or image"""
+- Do not invent details not present in the provided information or image
+- CRITICAL: If an "other store description" is provided, your description MUST be substantially different.
+  Use different sentence structures, different opening angles, different feature emphasis, and different
+  word choices. Never reuse phrases or mimic the structure of the other description."""
 
 
 def build_user_prompt(row: dict) -> str:
@@ -48,6 +52,9 @@ def build_user_prompt(row: dict) -> str:
 
     if row.get("occasion"):
         parts.append(f"Occasion: {row['occasion']}")
+
+    if row.get("store_a_description"):
+        parts.append(f"OTHER STORE description (DO NOT copy or closely resemble): {row['store_a_description']}")
 
     # Gather mini descriptions
     minis = []
