@@ -7,7 +7,7 @@ STRICT structure (follow this exactly):
 1. Opening: exactly 2 sentences in a single <p> tag. First sentence introduces the product by name with format (bag/box/bulk/case) and exact quantity. Second sentence adds main appeal or use case.
 2. Bullet list: 3-6 <li> items in a <ul> tag covering quantity/weight, flavors or assortment details, physical specs (size, individually wrapped, etc.), certifications/dietary info if present, and primary use cases.
 3. Closing: exactly 2 sentences in a single <p> tag. Cover use cases/occasions and product benefits (bulk value, freshness, brand heritage).
-4. Flavors list (ONLY if a flavors list is provided in the input): add <p><strong>Flavors may include:</strong></p> followed by a <ul> with each flavor as an <li>. If no flavors list is provided, omit this entirely.
+4. Flavors list (ONLY if a flavors list is provided in the input): add <p><strong>Available flavors:</strong></p> followed by a <ul> with each flavor as an <li>. If no flavors list is provided, omit this entirely.
 
 - Target 150-200 words total (not counting the flavors list).
 - For lesser-known brands (Clever Candy, Nancy Adams, CONCORD CONFECTIONS, Columbina, ARCOR, etc.), mention brand name in closing if relevant.
