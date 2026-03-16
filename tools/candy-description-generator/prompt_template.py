@@ -3,28 +3,16 @@
 SYSTEM_PROMPT = """You are a product copywriter for an online candy store. You write concise,
 informative product descriptions that help customers understand exactly what they're buying.
 
-Structure:
-- Opening section (2-3 short paragraphs) + Bullet points (3-6 items) + Closing section (2-3 short paragraphs).
-- Target 150-200 words total.
+STRICT structure (follow this exactly):
+1. Opening: exactly 2 sentences in a single <p> tag. First sentence introduces the product by name with format (bag/box/bulk/case) and exact quantity. Second sentence adds main appeal or use case.
+2. Bullet list: 3-6 <li> items in a <ul> tag covering quantity/weight, flavors or assortment details, physical specs (size, individually wrapped, etc.), certifications/dietary info if present, and primary use cases.
+3. Closing: exactly 2 sentences in a single <p> tag. Cover use cases/occasions and product benefits (bulk value, freshness, brand heritage).
+4. Flavors list (ONLY if a flavors list is provided in the input): add a final <ul> with each flavor as an <li>. If no flavors list is provided, omit this entirely.
 
-Opening section:
-- Lead with the product title (excluding quantity/unit suffix) in the first paragraph, adding format details (bag/box/bulk/case) and exact quantity.
-- Add main appeal or use case in the second paragraph.
-- Keep each paragraph to 1-2 sentences maximum.
-- For lesser-known brands (Clever Candy, Nancy Adams, CONCORD CONFECTIONS, Columbina, ARCOR, etc.), mention brand name in closing section if relevant for authenticity or sourcing context.
+- Target 150-200 words total (not counting the flavors list).
+- For lesser-known brands (Clever Candy, Nancy Adams, CONCORD CONFECTIONS, Columbina, ARCOR, etc.), mention brand name in closing if relevant.
 
-Bullet points:
-- Total quantity/weight.
-- Flavor varieties or assortment details.
-- Physical specifications (size, individually wrapped, resealable, etc.).
-- Certifications and dietary info when present.
-- Primary use cases.
-
-Closing section:
-- Include 2-3 use cases/occasions in short paragraphs (parties, weddings, vending machines, candy buffets, holidays).
-- Add product benefits (bulk value, freshness, shelf life).
-- Include trust signals when relevant (brand heritage, original formula, authentic import).
-- Maximum 2 sentences per paragraph.
+Do NOT add extra paragraphs. The output must have exactly: one <p>, one <ul>, one <p>, and optionally a flavors <ul>. Nothing else.
 
 SEO keywords to weave in naturally:
 - Brand names, actual flavor names ("sour watermelon" not "tangy fruit").
@@ -106,8 +94,11 @@ def build_user_prompt(row: dict) -> str:
     if minis:
         parts.append(f"Additional details: {' | '.join(minis)}")
 
+    if row.get("flavors_list"):
+        parts.append(f"Flavors list: {row['flavors_list']}")
+
     parts.append(
-        "\nWrite a product description following the rules (opening paragraphs, bullet points, closing paragraphs). Output as HTML using <p> and <ul>/<li> tags. Return only the HTML, nothing else."
+        "\nWrite a product description following the strict structure rules. Output as HTML using <p> and <ul>/<li> tags. Return only the HTML, nothing else."
     )
 
     return "\n".join(parts)
