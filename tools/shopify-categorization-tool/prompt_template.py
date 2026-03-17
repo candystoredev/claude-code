@@ -4,7 +4,7 @@ import json
 import re
 
 
-SYSTEM_PROMPT_TEMPLATE = """You are a product categorizer for CandyStore.com, a Shopify-based online candy store.
+SYSTEM_PROMPT_TEMPLATE = """You are a product categorizer for {store_name}, a Shopify-based online candy store.
 
 Your task: Given product data, assign each product to the correct Custom Collections.
 
@@ -41,10 +41,10 @@ def load_collections_for_prompt(collections: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(collections: dict[str, str]) -> str:
+def build_system_prompt(collections: dict[str, str], store_name: str = "CandyStore.com") -> str:
     """Build the full system prompt with the collections list embedded."""
     collections_text = load_collections_for_prompt(collections)
-    return SYSTEM_PROMPT_TEMPLATE.format(collections=collections_text)
+    return SYSTEM_PROMPT_TEMPLATE.format(collections=collections_text, store_name=store_name)
 
 
 def strip_html(html: str) -> str:

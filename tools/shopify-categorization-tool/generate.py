@@ -34,9 +34,10 @@ import config
 from prompt_template import build_system_prompt, build_user_prompt
 
 
-def load_collections() -> dict[str, str]:
-    """Load the collections handle->title mapping from JSON."""
-    with open(config.COLLECTIONS_FILE, encoding="utf-8") as f:
+def load_collections(store: str) -> dict[str, str]:
+    """Load the collections handle->title mapping from JSON for a given store (CS or CD)."""
+    filepath = config.COLLECTIONS_FILES[store]
+    with open(filepath, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -74,10 +75,18 @@ def load_products_xlsx(filepath: str) -> list[dict]:
             header_map["body_html"] = i
         elif hl == "vendor":
             header_map["vendor"] = i
+        elif hl in ("cs_or_cd", "store"):
+            header_map["store"] = i
 
     if "handle" not in header_map:
         print(f"Error: Could not find 'Handle' column in {filepath}")
         print(f"Found headers: {raw_headers}")
+        sys.exit(1)
+
+    if "store" not in header_map:
+        print(f"Error: Could not find 'CS_or_CD' column in {filepath}")
+        print(f"Found headers: {raw_headers}")
+        print("Each row must specify 'CS' (CandyStore) or 'CD' (CandyDirect)")
         sys.exit(1)
 
     products = []
@@ -85,11 +94,16 @@ def load_products_xlsx(filepath: str) -> list[dict]:
         handle = row[header_map["handle"]] if header_map.get("handle") is not None else ""
         if not handle:
             continue
+        store_val = str(row[header_map["store"]] or "").strip().upper()
+        if store_val not in ("CS", "CD"):
+            print(f"Warning: Skipping product '{handle}' — invalid CS_or_CD value: '{store_val}'")
+            continue
         product = {
             "handle": str(handle).strip(),
             "title": str(row[header_map.get("title", 0)] or "").strip(),
             "body_html": str(row[header_map.get("body_html", 0)] or "").strip(),
             "vendor": str(row[header_map.get("vendor", 0)] or "").strip(),
+            "store": store_val,
         }
         products.append(product)
 
@@ -170,7 +184,7 @@ def init_output_csv(filepath: str):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["Handle", "Title", "Vendor", "Custom Collections"])
+            writer.writerow(["Handle", "Title", "Vendor", "CS_or_CD", "Custom Collections"])
 
 
 def append_results(filepath: str, results: list[dict]):
@@ -182,6 +196,7 @@ def append_results(filepath: str, results: list[dict]):
                 r["handle"],
                 r["title"],
                 r["vendor"],
+                r["store"],
                 r["collections"],
             ])
 
@@ -232,17 +247,22 @@ def main():
         print("  echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env")
         sys.exit(1)
 
-    # Load collections
-    if not os.path.exists(config.COLLECTIONS_FILE):
-        print(f"Error: Collections file not found: {config.COLLECTIONS_FILE}")
-        sys.exit(1)
-
-    collections = load_collections()
-    valid_handles = set(collections.keys()) - {"show-all-products", "frontpage"}
-    print(f"Loaded {len(valid_handles)} collection handles")
-
-    # Build system prompt (done once, reused for all batches)
-    system_prompt = build_system_prompt(collections)
+    # Load collections for both stores
+    store_data = {}
+    for store_code, filepath in config.COLLECTIONS_FILES.items():
+        if not os.path.exists(filepath):
+            print(f"Error: Collections file not found for {store_code}: {filepath}")
+            sys.exit(1)
+        collections = load_collections(store_code)
+        valid_handles = set(collections.keys()) - {"show-all-products", "frontpage"}
+        store_name = "CandyStore.com" if store_code == "CS" else "CandyDirect.com"
+        system_prompt = build_system_prompt(collections, store_name)
+        store_data[store_code] = {
+            "collections": collections,
+            "valid_handles": valid_handles,
+            "system_prompt": system_prompt,
+        }
+        print(f"Loaded {len(valid_handles)} collection handles for {store_code} ({store_name})")
 
     # Load products
     if not os.path.exists(input_path):
@@ -273,11 +293,18 @@ def main():
         print("Nothing to process.")
         return
 
+    # Group remaining products by store so each batch uses the correct collections
+    products_by_store = {}
+    for p in remaining:
+        products_by_store.setdefault(p["store"], []).append(p)
+
+    for store_code, count in sorted((k, len(v)) for k, v in products_by_store.items()):
+        print(f"  {store_code}: {count} products")
+
     client = anthropic.Anthropic(api_key=api_key)
 
-    # Process in batches
+    # Process each store's products in batches
     batch_size = args.batch_size
-    total_batches = (len(remaining) + batch_size - 1) // batch_size
     processed = 0
     errors = 0
     buffer = []
@@ -289,78 +316,92 @@ def main():
     }
 
     print(f"Using model: {config.API_MODEL} with prompt caching enabled")
-    print(f"Batch size: {batch_size} products/call ({total_batches} API calls total)\n")
 
-    for batch_num in range(total_batches):
-        start = batch_num * batch_size
-        end = min(start + batch_size, len(remaining))
-        batch = remaining[start:end]
+    for store_code in sorted(products_by_store.keys()):
+        store_products = products_by_store[store_code]
+        sd = store_data[store_code]
+        system_prompt = sd["system_prompt"]
+        valid_handles = sd["valid_handles"]
+        total_batches = (len(store_products) + batch_size - 1) // batch_size
 
-        batch_handles = [p["handle"] for p in batch]
-        print(
-            f"[Batch {batch_num + 1}/{total_batches}] "
-            f"Processing {len(batch)} products: {batch_handles[0]}...{batch_handles[-1]}",
-            end=" ",
-            flush=True,
-        )
+        store_name = "CandyStore" if store_code == "CS" else "CandyDirect"
+        print(f"\n--- Processing {store_name} ({store_code}) ---")
+        print(f"Batch size: {batch_size} products/call ({total_batches} API calls)\n")
 
-        try:
-            result = categorize_batch(client, system_prompt, batch, valid_handles, usage_stats)
+        for batch_num in range(total_batches):
+            start = batch_num * batch_size
+            end = min(start + batch_size, len(store_products))
+            batch = store_products[start:end]
 
-            for p in batch:
-                collections_list = result.get(p["handle"], [])
-                buffer.append({
-                    "handle": p["handle"],
-                    "title": p["title"],
-                    "vendor": p["vendor"],
-                    "collections": ", ".join(collections_list),
-                })
-                processed += 1
+            batch_handles = [p["handle"] for p in batch]
+            print(
+                f"[{store_code} Batch {batch_num + 1}/{total_batches}] "
+                f"Processing {len(batch)} products: {batch_handles[0]}...{batch_handles[-1]}",
+                end=" ",
+                flush=True,
+            )
 
-            avg_collections = sum(len(v) for v in result.values()) / max(len(result), 1)
-            print(f"OK (avg {avg_collections:.1f} collections/product)")
+            try:
+                result = categorize_batch(client, system_prompt, batch, valid_handles, usage_stats)
 
-        except json.JSONDecodeError as e:
-            print(f"JSON PARSE ERROR: {e}")
-            for p in batch:
-                buffer.append({
-                    "handle": p["handle"],
-                    "title": p["title"],
-                    "vendor": p["vendor"],
-                    "collections": "",
-                })
-            errors += len(batch)
+                for p in batch:
+                    collections_list = result.get(p["handle"], [])
+                    buffer.append({
+                        "handle": p["handle"],
+                        "title": p["title"],
+                        "vendor": p["vendor"],
+                        "store": p["store"],
+                        "collections": ", ".join(collections_list),
+                    })
+                    processed += 1
 
-        except anthropic.APIError as e:
-            print(f"API ERROR: {e}")
-            for p in batch:
-                buffer.append({
-                    "handle": p["handle"],
-                    "title": p["title"],
-                    "vendor": p["vendor"],
-                    "collections": "",
-                })
-            errors += len(batch)
+                avg_collections = sum(len(v) for v in result.values()) / max(len(result), 1)
+                print(f"OK (avg {avg_collections:.1f} collections/product)")
 
-        except Exception as e:
-            print(f"ERROR: {e}")
-            for p in batch:
-                buffer.append({
-                    "handle": p["handle"],
-                    "title": p["title"],
-                    "vendor": p["vendor"],
-                    "collections": "",
-                })
-            errors += len(batch)
+            except json.JSONDecodeError as e:
+                print(f"JSON PARSE ERROR: {e}")
+                for p in batch:
+                    buffer.append({
+                        "handle": p["handle"],
+                        "title": p["title"],
+                        "vendor": p["vendor"],
+                        "store": p["store"],
+                        "collections": "",
+                    })
+                errors += len(batch)
 
-        # Checkpoint
-        if len(buffer) >= config.SAVE_EVERY_N * batch_size:
-            append_results(output_path, buffer)
-            buffer = []
-            print(f"  -- Checkpoint saved. Processed: {processed}, Errors: {errors}")
+            except anthropic.APIError as e:
+                print(f"API ERROR: {e}")
+                for p in batch:
+                    buffer.append({
+                        "handle": p["handle"],
+                        "title": p["title"],
+                        "vendor": p["vendor"],
+                        "store": p["store"],
+                        "collections": "",
+                    })
+                errors += len(batch)
 
-        # Rate limiting
-        time.sleep(1.0 / config.REQUESTS_PER_SECOND)
+            except Exception as e:
+                print(f"ERROR: {e}")
+                for p in batch:
+                    buffer.append({
+                        "handle": p["handle"],
+                        "title": p["title"],
+                        "vendor": p["vendor"],
+                        "store": p["store"],
+                        "collections": "",
+                    })
+                errors += len(batch)
+
+            # Checkpoint
+            if len(buffer) >= config.SAVE_EVERY_N * batch_size:
+                append_results(output_path, buffer)
+                buffer = []
+                print(f"  -- Checkpoint saved. Processed: {processed}, Errors: {errors}")
+
+            # Rate limiting
+            time.sleep(1.0 / config.REQUESTS_PER_SECOND)
 
     # Flush remaining buffer
     if buffer:

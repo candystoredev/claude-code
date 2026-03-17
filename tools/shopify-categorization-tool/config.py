@@ -17,7 +17,10 @@ SAVE_EVERY_N = 5  # Save progress every N batches
 TOOL_DIR = os.path.dirname(__file__)
 INPUT_DIR = os.path.join(TOOL_DIR, "input")
 OUTPUT_DIR = os.path.join(TOOL_DIR, "output")
-COLLECTIONS_FILE = os.path.join(TOOL_DIR, "collections.json")
+COLLECTIONS_FILES = {
+    "CS": os.path.join(TOOL_DIR, "collections_cs.json"),
+    "CD": os.path.join(TOOL_DIR, "collections_cd.json"),
+}
 
 # Default file names (can be overridden via CLI)
 DEFAULT_INPUT_FILE = "products.xlsx"
