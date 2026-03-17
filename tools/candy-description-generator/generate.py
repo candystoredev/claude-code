@@ -61,6 +61,24 @@ def get_image_media_type(url: str) -> str:
     return "image/jpeg"
 
 
+def build_variant_options_html(row: dict) -> str:
+    """Build HTML suffix listing variant options for configurable products."""
+    if row.get("is_config", "").strip().lower() != "yes":
+        return ""
+    options_raw = row.get("variant_options", "").strip()
+    if not options_raw:
+        return ""
+    options = sorted(
+        [opt.strip() for opt in options_raw.split(",") if opt.strip()],
+        key=str.casefold,
+    )
+    if not options:
+        return ""
+    variant_type = row.get("variant_type", "").strip()
+    label = f"{variant_type}s often available" if variant_type else "Options often available"
+    return f"\n<p><strong>{label}</strong></p>\n<p>{', '.join(options)}</p>"
+
+
 def generate_description(client: anthropic.Anthropic, row: dict) -> str:
     """Call Claude API with image + text prompt for a single product."""
     user_text = build_user_prompt(row)
@@ -186,6 +204,7 @@ def main():
 
         try:
             description = generate_description(client, row)
+            description += build_variant_options_html(row)
             row["new_description"] = description
             row["generation_status"] = "success"
             processed += 1

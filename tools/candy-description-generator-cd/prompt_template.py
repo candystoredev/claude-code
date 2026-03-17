@@ -28,7 +28,18 @@ Rules:
 - Do not invent details not present in the provided information or image
 - CRITICAL: If an "other store description" is provided, your description MUST be substantially different.
   Use different sentence structures, different opening angles, different feature emphasis, and different
-  word choices. Never reuse phrases or mimic the structure of the other description."""
+  word choices. Never reuse phrases or mimic the structure of the other description.
+
+Configurable products (is_config: Yes):
+- These products have multiple variants (e.g., flavors, colors) sold under one listing.
+- The description provided is from ONE variant only. Ignore variant-specific details such as
+  individual flavor descriptions, color-specific imagery, or any details that apply only to that
+  single variant rather than the product as a whole.
+- Write a general description that applies to ALL variants of the product.
+- Describe the product line/brand, the format, quantity, and what makes it appealing overall.
+- Do NOT list the available variants in your description — that will be appended separately.
+- The variant_type field tells you the category (e.g., "Color", "Flavor") and variant_options
+  lists what is available. Use this context to understand the product but do not enumerate them."""
 
 
 def build_user_prompt(row: dict) -> str:
@@ -55,6 +66,14 @@ def build_user_prompt(row: dict) -> str:
 
     if row.get("store_a_description"):
         parts.append(f"OTHER STORE description (DO NOT copy or closely resemble): {row['store_a_description']}")
+
+    # Configurable product fields
+    if row.get("is_config", "").strip().lower() == "yes":
+        parts.append("is_config: Yes")
+        if row.get("variant_type"):
+            parts.append(f"variant_type: {row['variant_type']}")
+        if row.get("variant_options"):
+            parts.append(f"variant_options: {row['variant_options']}")
 
     # Gather mini descriptions
     minis = []
