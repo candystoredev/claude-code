@@ -28,7 +28,7 @@ def extract_size(name: str) -> str:
     """
     if not name:
         return ""
-    match = re.search(r"(\d+\.?\d*)\s*OZ", str(name), re.IGNORECASE)
+    match = re.search(r"(\d*\.?\d+)\s*OZ", str(name), re.IGNORECASE)
     return match.group(0) if match else ""
 
 
